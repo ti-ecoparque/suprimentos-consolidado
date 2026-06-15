@@ -28,7 +28,7 @@ def localizar_arquivo_excel(pasta):
     return os.path.join(pasta, arquivos[0])
 
 def processar_e_salvar_dados():
-    # Define o caminho dinâmico para a pasta na raiz do projeto
+    # Caminho dinâmico para a pasta na raiz do projeto
     diretorio_atual = os.path.dirname(os.path.abspath(__file__)) if '__file__' in locals() else os.getcwd()
     pasta_origem = os.path.join(diretorio_atual, "xls_solicitacao")
     caminho_excel = localizar_arquivo_excel(pasta_origem)
