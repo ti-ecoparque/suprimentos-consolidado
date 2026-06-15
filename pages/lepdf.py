@@ -120,8 +120,8 @@ if arquivos_enviados:
 
                 # Varredura das linhas de itens
                 linhas_do_pdf = texto_completo.split("\n")
-                itens_deste_pdf = []
-                codigos_materiais = []
+                codigos_materiais_novos = []
+                contem_item_novo = False
                 
                 for linha in linhas_do_pdf:
                     linha_limpa = linha.strip()
@@ -131,11 +131,21 @@ if arquivos_enviados:
                     if len(partes) >= 5:
                         codigo_material = partes[0]
                         if codigo_material.isdigit() and len(codigo_material) <= 9:
-                            codigos_materiais.append(codigo_material)
-                            itens_deste_pdf.append({
+                            mat_int = int(codigo_material)
+                            
+                            # TRAVA CIRÚRGICA LINHA POR LINHA
+                            chave_linha = (rm_resultado, pedido_resultado, mat_int)
+                            
+                            if chave_linha in registros_existentes:
+                                continue # Pula apenas este item repetido
+                            
+                            # Se for item novo, computa no pacote
+                            contem_item_novo = True
+                            codigos_materiais_novos.append(codigo_material)
+                            todos_os_registros.append({
                                 "rm": rm_resultado,
                                 "pedido": pedido_resultado,
-                                "mat": int(codigo_material),
+                                "mat": mat_int,
                                 "cnpj": str(cnpj) if cnpj else None,
                                 "emissao": emissao,
                                 "entrega": entrega,
@@ -143,51 +153,41 @@ if arquivos_enviados:
                                 "entregas_agendadas": entregas_agendadas
                             })
 
-                if itens_deste_pdf:
-                    primeiro_item = itens_deste_pdf
-                    chave_item = (primeiro_item["rm"], primeiro_item["pedido"], primeiro_item["mat"])
-                    
-                    if chave_item in registros_existentes:
-                        arquivos_ignorados += 1
-                        continue
-                    
-                    todos_os_registros.extend(itens_deste_pdf)
-                    
+                if contem_item_novo:
                     resumo_processamento.append({
                         "Pedido": pedido_resultado if pedido_resultado else "N/A",
                         "RM": rm_resultado if rm_resultado else "N/A",
-                        "Materiais": ", ".join(sorted(list(set(codigos_materiais)))),
+                        "Materiais": ", ".join(sorted(list(set(codigos_materiais_novos)))),
                         "CNPJ Fornecedor": cnpj if cnpj else "N/A",
                         "Status": "Importado"
                     })
+                else:
+                    arquivos_ignorados += 1
+                    
             except Exception as e:
                 st.error(f"⚠️ Falha ao ler o arquivo {arquivo_buffer.name}: {e}")
                 continue
 
-        # Processamento e salvamento final
+        # Envio em bloco para o Supabase e controle das mensagens na sessão
         if todos_os_registros:
             try:
                 salvar_itens_no_banco(todos_os_registros)
                 
-                # Salvamento de estados persistentes antes do reload
                 st.session_state.mostrar_tabela_resumo = True
                 st.session_state.dados_resumo = resumo_processamento
                 st.session_state.total_linhas_importadas = len(todos_os_registros)
                 st.session_state.total_arquivos_ignorados = arquivos_ignorados
                 st.session_state.mensagem_tipo = "sucesso"
                 
-                # Executa a limpeza da caixa cinza incrementando a chave
                 st.session_state.id_upload += 1
                 st.rerun()
                 
             except Exception as e:
                 st.error(f"Erro crítico ao salvar no banco de dados: {e}")
         else:
-            # Caso todos os arquivos enviados já existam no Supabase
             st.session_state.mostrar_tabela_resumo = True
             st.session_state.dados_resumo = []
-            st.session_state.total_linhas_importadas = 0
-            st.session_state.total_arquivos_ignorados = arquivos_ignorados
+            st.session_state.total_arquivos_ignorados = len(arquivos_enviados)
             st.session_state.mensagem_tipo = "aviso_tudo_duplicado"
             
             st.session_state.id_upload += 1
@@ -205,13 +205,13 @@ if st.session_state.mostrar_tabela_resumo:
     elif st.session_state.mensagem_tipo == "aviso_tudo_duplicado":
         st.warning(f"🎉 Todos os {st.session_state.total_arquivos_ignorados} arquivos enviados já haviam sido importados anteriormente no Supabase!")
 
-    # Só renderiza a tabela se de fato houverem novos dados cadastrados nessa rodada
+    # Só renderiza a tabela se de fato houver novos dados cadastrados nessa rodada
     if st.session_state.dados_resumo:
         st.subheader("📋 Relatório de Arquivos Processados Nesta Rodada")
         df_resumo = pd.DataFrame(st.session_state.dados_resumo)
         st.dataframe(df_resumo, use_container_width=True, hide_index=True)
     
-    # Botão para o usuário limpar as mensagens antigas da tela quando quiser
+    # Botão para o usuário limpar as notificações antigas quando desejar
     if st.button("🧹 Limpar Histórico do Terminal / Mensagens"):
         st.session_state.mostrar_tabela_resumo = False
         st.session_state.dados_resumo = []
