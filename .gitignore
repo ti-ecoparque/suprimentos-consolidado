@@ -19,4 +19,4 @@ xls_solicitacao/
 processados/
 
 # Cache oculto do Python na raiz (Importante incluir)
-__pycache__/
+__pycache__/XX_backup/
