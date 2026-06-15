@@ -25,42 +25,42 @@ def extrair_dados_pdf(caminho_do_arquivo):
                 texto_completo += texto + "\n"
 
         # Limpeza absoluta de caracteres invisíveis e nulos de controle de página
-        texto_completo = texto_completo.replace("\x00", "").replace("\x0c", "").replace("", "")
+        texto_completo = texto_completo.replace("\x00", "").replace("\x0c", "").replace("\r", "")
 
-        # 1. BUSCA PEDIDO
+        # 1. BUSCA PEDIDO (CORRIGIDO: Inserido \d+ para capturar a sequência numérica)
         pedido_resultado = None
         try:
-            padrao_pedido = re.search(r"pedido:*(+)", texto_completo, re.IGNORECASE)
+            padrao_pedido = re.search(r"pedido:\s*(\d+)", texto_completo, re.IGNORECASE)
             if padrao_pedido:
                 pedido_resultado = int(padrao_pedido.group(1))
         except:
             pedido_resultado = None
 
-        # 2. BUSCA RM
+        # 2. BUSCA RM (CORRIGIDO: Inserido \d+ antes das letras R e M)
         rm_resultado = None
         try:
-            padrao_rm = re.search(r"(+)*[rR]*[mM]", texto_completo)
+            padrao_rm = re.search(r"(\d+)\s*[rR]\s*[mM]", texto_completo)
             if padrao_rm:
                 rm_resultado = int(padrao_rm.group(1))
         except:
             rm_resultado = None
 
-        # 3. BUSCA CNPJ
+        # 3. BUSCA CNPJ (CORRIGIDO: Adicionado \d e quantificadores corretos)
         cnpj = None
         try:
-            padrao_cnpj = re.search(r"{2}\.{3}\.{3}/{4}-{2}", texto_completo)
+            padrao_cnpj = re.search(r"\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}", texto_completo)
             if padrao_cnpj:
                 cnpj = padrao_cnpj.group(0)
         except:
             cnpj = None
 
-        # 4. BUSCA DATAS
+        # 4. BUSCA DATAS (CORRIGIDO: Adicionado \d nos blocos de repetição de caracteres)
         emissao = None
         try:
             pos_emissao = texto_completo.lower().find("emiss")
             if pos_emissao != -1:
                 trecho_data = texto_completo[pos_emissao:pos_emissao + 40]
-                datas = re.findall(r"{2}/{2}/{4}", trecho_data)
+                datas = re.findall(r"\d{2}/\d{2}/\d{4}", trecho_data)
                 if datas:
                     emissao = converter_data(datas[0])
         except:
@@ -71,7 +71,7 @@ def extrair_dados_pdf(caminho_do_arquivo):
             pos_entrega = texto_completo.lower().find("entrega")
             if pos_entrega != -1:
                 trecho_data = texto_completo[pos_entrega:pos_entrega + 40]
-                datas = re.findall(r"{2}/{2}/{4}", trecho_data)
+                datas = re.findall(r"\d{2}/\d{2}/\d{4}", trecho_data)
                 if datas:
                     entrega = converter_data(datas[0])
         except:
