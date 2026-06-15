@@ -47,9 +47,15 @@ if not st.session_state.logado:
 # Barra lateral para exibir o usuário atual e botão de Logout
 with st.sidebar:
     st.write(f"👤 Conectado como: **{st.session_state.usuario_atual}**")
+    
+    # O Streamlit exige o nome de registro da página em minúsculas internamente
+    st.page_link("pages/lepdf.py", label="🔄 Integrador LePDF", icon="📂")
+    
+    st.divider()
     if st.button("🚪 Sair do Sistema"):
         st.session_state.logado = False
         st.rerun()
+
 
 # Importação dos módulos desmembrados
 from cenarios.cenario_a import renderizar_cenario_a
