@@ -14,15 +14,7 @@ if "logado" not in st.session_state or not st.session_state.logado:
     if st.button("Ir para o Login"):
         st.switch_page("app.py")
     st.stop()
-    
-# Verificação do st.session_state.logado:
-if "id_upload" not in st.session_state:
-    st.session_state.id_upload = 0
 
-if "mostrar_tabela_resumo" not in st.session_state:
-    st.session_state.mostrar_tabela_resumo = False
-    st.session_state.dados_resumo = []
-    
 def converter_data(data_str):
     """Converte de dd/mm/yyyy para yyyy-mm-dd"""
     try:
@@ -30,6 +22,17 @@ def converter_data(data_str):
         return datetime.strptime(data_limpa, "%d/%m/%Y").strftime("%Y-%m-%d")
     except:
         return None
+
+# --- INICIALIZAÇÃO DE VARIÁVEIS DE SESSÃO PERSISTENTES ---
+if "id_upload" not in st.session_state:
+    st.session_state.id_upload = 0
+
+if "mostrar_tabela_resumo" not in st.session_state:
+    st.session_state.mostrar_tabela_resumo = False
+    st.session_state.dados_resumo = []
+    st.session_state.total_linhas_importadas = 0
+    st.session_state.total_arquivos_ignorados = 0
+    st.session_state.mensagem_tipo = "" # 'sucesso' ou 'aviso_tudo_duplicado'
 
 # 2. CONEXÃO COM O SUPABASE
 SUPABASE_URL = st.secrets["SUPABASE_URL"]
@@ -42,7 +45,7 @@ st.divider()
 
 st.write("📌 **Instruções:** Selecione ou arraste um ou mais arquivos PDF de pedidos de compra diretamente para o campo abaixo para realizar a importação automática para o banco de dados.")
 
-# 3. CAMPO DE UPLOAD NATIVO (Atualizado com chave dinâmica para reset)
+# 3. CAMPO DE UPLOAD NATIVO (Chave dinâmica para resetar e limpar a caixa cinza)
 arquivos_enviados = st.file_uploader(
     "Arraste os arquivos PDF aqui", 
     type=["pdf"], 
@@ -54,7 +57,7 @@ if arquivos_enviados:
     st.metric(label="PDFs carregados para processamento", value=len(arquivos_enviados))
     
     if st.button("🚀 Iniciar Processamento dos PDFs", use_container_width=True):
-        # Consulta de histórico no Supabase
+        # Consulta de histórico no Supabase para evitar duplicidade
         with st.spinner("Consultando registros existentes no Supabase..."):
             try:
                 resposta_existentes = supabase.table("pedido_compra").select("rm, pedido, mat").execute()
@@ -81,7 +84,7 @@ if arquivos_enviados:
 
                 texto_completo = texto_completo.replace("\x00", "").replace("\x0c", "").replace("\r", "")
                 
-                # Regex de extração de metadados
+                # Regex de extração de cabeçalhos
                 pedido_resultado = None
                 padrao_pedido = re.search(r"pedido:\s*(\d+)", texto_completo, re.IGNORECASE)
                 if padrao_pedido: pedido_resultado = int(padrao_pedido.group(1))
@@ -115,7 +118,7 @@ if arquivos_enviados:
                         d_conv = converter_data(parte)
                         if d_conv and d_conv not in entregas_agendadas: entregas_agendadas.append(d_conv)
 
-                # Varredura de itens da tabela
+                # Varredura das linhas de itens
                 linhas_do_pdf = texto_completo.split("\n")
                 itens_deste_pdf = []
                 codigos_materiais = []
@@ -161,41 +164,56 @@ if arquivos_enviados:
                 st.error(f"⚠️ Falha ao ler o arquivo {arquivo_buffer.name}: {e}")
                 continue
 
-        # Processamento do envio em bloco
+        # Processamento e salvamento final
         if todos_os_registros:
             try:
                 salvar_itens_no_banco(todos_os_registros)
                 
-                # Guarda as informações do relatório na sessão antes de resetar a página
+                # Salvamento de estados persistentes antes do reload
                 st.session_state.mostrar_tabela_resumo = True
                 st.session_state.dados_resumo = resumo_processamento
                 st.session_state.total_linhas_importadas = len(todos_os_registros)
                 st.session_state.total_arquivos_ignorados = arquivos_ignorados
+                st.session_state.mensagem_tipo = "sucesso"
                 
-                # --- TRAVA MÁGICA DE RESET ---
-                # Incrementa o ID para forçar o Streamlit a recriar a caixa de upload vazia
+                # Executa a limpeza da caixa cinza incrementando a chave
                 st.session_state.id_upload += 1
                 st.rerun()
                 
             except Exception as e:
                 st.error(f"Erro crítico ao salvar no banco de dados: {e}")
         else:
-            st.success("🎉 Todos os arquivos enviados já haviam sido importados anteriormente!")
+            # Caso todos os arquivos enviados já existam no Supabase
+            st.session_state.mostrar_tabela_resumo = True
+            st.session_state.dados_resumo = []
+            st.session_state.total_linhas_importadas = 0
+            st.session_state.total_arquivos_ignorados = arquivos_ignorados
+            st.session_state.mensagem_tipo = "aviso_tudo_duplicado"
+            
             st.session_state.id_upload += 1
             st.rerun()
 
-# --- EXIBIÇÃO PERSISTENTE DA TABELA DE RELATÓRIO PÓS-RESET ---
+# --- BLOCO DE EXIBIÇÃO PERSISTENTE (O código lê as mensagens daqui pós-reload) ---
 if st.session_state.mostrar_tabela_resumo:
-    st.success(f"✔️ Sucesso! {st.session_state.total_linhas_importadas} novos itens cadastrados no banco de dados!")
-    if st.session_state.total_arquivos_ignorados > 0:
-        st.info(f"ℹ️ {st.session_state.total_arquivos_ignorados} arquivo(s) foram ignorados por já existirem no histórico.")
-        
-    st.subheader("📋 Relatório de Arquivos Processados Nesta Rodada")
-    df_resumo = pd.DataFrame(st.session_state.dados_resumo)
-    st.dataframe(df_resumo, use_container_width=True, hide_index=True)
+    st.write("---") # Divisor sutil
     
-    # Cria um botão opcional para limpar o histórico visual do relatório quando o usuário quiser
-    if st.button("🧹 Limpar Relatório da Tela"):
+    if st.session_state.mensagem_tipo == "sucesso":
+        st.success(f"✔️ Sucesso! {st.session_state.total_linhas_importadas} novos itens cadastrados no banco de dados!")
+        if st.session_state.total_arquivos_ignorados > 0:
+            st.info(f"ℹ️ {st.session_state.total_arquivos_ignorados} arquivo(s) foram ignorados por já existirem no histórico.")
+            
+    elif st.session_state.mensagem_tipo == "aviso_tudo_duplicado":
+        st.warning(f"🎉 Todos os {st.session_state.total_arquivos_ignorados} arquivos enviados já haviam sido importados anteriormente no Supabase!")
+
+    # Só renderiza a tabela se de fato houverem novos dados cadastrados nessa rodada
+    if st.session_state.dados_resumo:
+        st.subheader("📋 Relatório de Arquivos Processados Nesta Rodada")
+        df_resumo = pd.DataFrame(st.session_state.dados_resumo)
+        st.dataframe(df_resumo, use_container_width=True, hide_index=True)
+    
+    # Botão para o usuário limpar as mensagens antigas da tela quando quiser
+    if st.button("🧹 Limpar Histórico do Terminal / Mensagens"):
         st.session_state.mostrar_tabela_resumo = False
         st.session_state.dados_resumo = []
+        st.session_state.mensagem_tipo = ""
         st.rerun()
