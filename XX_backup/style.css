@@ -1,0 +1,27 @@
+/* style.css */
+.pedido-box {
+    border: 1px solid #dcdcdc;
+    padding: 20px;
+    border-radius: 10px;
+    margin-bottom: 30px;
+    background-color: #ffffff;
+    color: #111111;
+}
+
+/* Modifica as pílulas do multiselect para Azul */
+div[data-baseweb="tag"] {
+    background-color: #e8f0fe !important;
+    border: 1px solid #1a73e8 !important;
+    color: #1a73e8 !important;
+}
+
+div[data-baseweb="tag"] button, 
+div[data-baseweb="tag"] svg {
+    fill: #1a73e8 !important;
+    color: #1a73e8 !important;
+}
+
+/* Remove a borda vermelha padrão do multiselect */
+.stMultiSelect div[data-baseweb="select"] {
+    border-color: #cccccc !important;
+}
