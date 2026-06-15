@@ -1,0 +1,22 @@
+# Arquivos de credenciais locais (NUNCA PODEM IR PRO GIT)
+.env
+.streamlit/secrets.toml
+
+# Pastas de cache do Python e do VS Code
+__pycache__/
+.pytest_cache/
+.vscode/
+
+# Arquivos do OneDrive ou temporários do sistema
+Thumbs.db
+.DS_Store
+*.pyc
+
+# Pastas de arquivos e relatórios locais (Adicione isso)
+pdf_pedido_compra/
+xls_pedido/
+xls_solicitacao/
+processados/
+
+# Cache oculto do Python na raiz (Importante incluir)
+__pycache__/
