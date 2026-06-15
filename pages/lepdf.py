@@ -1,11 +1,12 @@
 # pages/lepdf.py
 import os
+import re
 import streamlit as st
 import pandas as pd
 from pypdf import PdfReader
-from leituras.le_pdf_pedido import extrair_dados_pdf
 from database.banco import salvar_itens_no_banco
 from supabase import create_client
+from datetime import datetime
 
 # 1. VALIDAÇÃO DE SEGURANÇA
 if "logado" not in st.session_state or not st.session_state.logado:
@@ -13,6 +14,14 @@ if "logado" not in st.session_state or not st.session_state.logado:
     if st.button("Ir para o Login"):
         st.switch_page("app.py")
     st.stop()
+
+def converter_data(data_str):
+    """Converte de dd/mm/yyyy para yyyy-mm-dd"""
+    try:
+        data_limpa = data_str.strip()
+        return datetime.strptime(data_limpa, "%d/%m/%Y").strftime("%Y-%m-%d")
+    except:
+        return None
 
 # 2. CONEXÃO COM O SUPABASE
 SUPABASE_URL = st.secrets["SUPABASE_URL"]
@@ -25,7 +34,7 @@ st.divider()
 
 st.write("📌 **Instruções:** Selecione ou arraste um ou mais arquivos PDF de pedidos de compra diretamente para o campo abaixo para realizar a importação automática para o banco de dados.")
 
-# 3. CAMPO DE UPLOAD NATIVO (Substitui a leitura de pastas físicas do OneDrive)
+# 3. CAMPO DE UPLOAD NATIVO
 arquivos_enviados = st.file_uploader(
     "Arraste os arquivos PDF aqui", 
     type=["pdf"], 
@@ -47,15 +56,15 @@ if arquivos_enviados:
                 st.stop()
 
         todos_os_registros = []
+        resumo_processamento = []
         arquivos_ignorados = 0
         
         progresso = st.progress(0, text="Analisando arquivos...")
         
         for idx, arquivo_buffer in enumerate(arquivos_enviados):
-            progresso.progress((idx + 1) / len(arquivos_enviados), text=f"Lendo em memória: {arquivo_buffer.name}")
+            progresso.progress((idx + 1) / len(arquivos_enviados), text=f"Processando: {arquivo_buffer.name}")
             
             try:
-                # ADAPTAÇÃO PARA LER EM MEMÓRIA: Passa o arquivo enviado direto para o leitor de PDF
                 leitor = PdfReader(arquivo_buffer)
                 texto_completo = ""
                 for pagina in leitor.pages:
@@ -63,12 +72,9 @@ if arquivos_enviados:
                     if texto:
                         texto_completo += texto + "\n"
 
-                # Como o seu arquivo le_pdf_pedido original esperava um caminho de string, 
-                # extraímos os dados diretamente aqui usando a mesma lógica blindada do seu script
                 texto_completo = texto_completo.replace("\x00", "").replace("\x0c", "").replace("\r", "")
                 
-                # Extração dos cabeçalhos do PDF
-                import re
+                # --- EXTRAÇÃO DE CABEÇALHOS (RESTAURADA E CORRIGIDA) ---
                 pedido_resultado = None
                 padrao_pedido = re.search(r"pedido:\s*(\d+)", texto_completo, re.IGNORECASE)
                 if padrao_pedido: pedido_resultado = int(padrao_pedido.group(1))
@@ -81,12 +87,35 @@ if arquivos_enviados:
                 padrao_cnpj = re.search(r"\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}", texto_completo)
                 if padrao_cnpj: cnpj = padrao_cnpj.group(0)
 
-                # Datas e observações omitidas/simplificadas para performance rápida
-                emissao, entrega, observacao = None, None, None
-                
-                # Varredura das linhas de itens
+                # Captura de Datas (Emissão e Entrega)
+                emissao = None
+                padrao_emissao = re.search(r"emiss.*:\s*(\d{2}/\d{2}/\d{4})", texto_completo, re.IGNORECASE)
+                if padrao_emissao: emissao = converter_data(padrao_emissao.group(1))
+
+                entrega = None
+                padrao_entrega = re.search(r"entrega.*:\s*(\d{2}/\d{2}/\d{4})", texto_completo, re.IGNORECASE)
+                if padrao_entrega: entrega = converter_data(padrao_entrega.group(1))
+
+                # Captura de Observação
+                observacao = None
+                pos_obs = texto_completo.lower().find("observa")
+                if pos_obs == -1: pos_obs = texto_completo.lower().find("complementar")
+                if pos_obs != -1:
+                    linhas_texto = texto_completo[pos_obs:].split("\n")
+                    if linhas_texto: observacao = linhas_texto[0].strip()
+
+                # Captura de Entregas Agendadas
+                entregas_agendadas = []
+                for parte in texto_completo.split():
+                    if len(parte) == 10 and "/" in parte:
+                        d_conv = converter_data(parte)
+                        if d_conv and d_conv not in entregas_agendadas:
+                            entregas_agendadas.append(d_conv)
+
+                # --- VARREDURA DE ITENS ---
                 linhas_do_pdf = texto_completo.split("\n")
                 itens_deste_pdf = []
+                codigos_materiais = []
                 
                 for linha in linhas_do_pdf:
                     linha_limpa = linha.strip()
@@ -96,6 +125,7 @@ if arquivos_enviados:
                     if len(partes) >= 5:
                         codigo_material = partes[0]
                         if codigo_material.isdigit() and len(codigo_material) <= 9:
+                            codigos_materiais.append(codigo_material)
                             itens_deste_pdf.append({
                                 "rm": rm_resultado,
                                 "pedido": pedido_resultado,
@@ -104,31 +134,47 @@ if arquivos_enviados:
                                 "emissao": emissao,
                                 "entrega": entrega,
                                 "observacao": observacao,
-                                "entregas_agendadas": []
+                                "entregas_agendadas": entregas_agendadas
                             })
 
                 if itens_deste_pdf:
-                    # Checa duplicidade baseado no primeiro item capturado
                     primeiro_item = itens_deste_pdf[0]
                     chave_item = (primeiro_item["rm"], primeiro_item["pedido"], primeiro_item["mat"])
                     
+                    # Se já existe no banco, ignora e pula pro próximo PDF
                     if chave_item in registros_existentes:
                         arquivos_ignorados += 1
                         continue
                     
                     todos_os_registros.extend(itens_deste_pdf)
+                    
+                    # Guarda os dados para a lista visual de sucesso na tela
+                    resumo_processamento.append({
+                        "Pedido": pedido_resultado if pedido_resultado else "N/A",
+                        "RM": rm_resultado if rm_resultado else "N/A",
+                        "Materiais": ", ".join(sorted(list(set(codigos_materiais)))),
+                        "CNPJ Fornecedor": cnpj if cnpj else "N/A",
+                        "Status": "Importado"
+                    })
             except Exception as e:
-                st.write(f"⚠️ Falha ao ler o arquivo {arquivo_buffer.name}: {e}")
+                st.error(f"⚠️ Falha ao ler o arquivo {arquivo_buffer.name}: {e}")
                 continue
 
         # Envio em bloco para o Supabase
         if todos_os_registros:
-            with st.spinner(f"Enviando {len(todos_os_registros)} novas linhas para o Supabase..."):
+            with st.spinner(f"Enviando {len(todos_os_registros)} linhas para o Supabase..."):
                 try:
                     salvar_itens_no_banco(todos_os_registros)
                     st.success(f"✔️ Sucesso! {len(todos_os_registros)} novos itens cadastrados no banco de dados!")
+                    
                     if arquivos_ignorados > 0:
-                        st.info(f"ℹ️ {arquivos_ignorados} arquivo(s) foram ignorados por já existirem no histórico do Supabase.")
+                        st.info(f"ℹ️ {arquivos_ignorados} arquivo(s) foram ignorados por já existirem no histórico.")
+                    
+                    # --- NOVO: EXIBIÇÃO EM TABELA DOS DADOS SUBIDOS ---
+                    st.subheader("📋 Relatório de Arquivos Processados Nesta Rodada")
+                    df_resumo = pd.DataFrame(resumo_processamento)
+                    st.dataframe(df_resumo, use_container_width=True, hide_index=True)
+                    
                 except Exception as e:
                     st.error(f"Erro crítico ao salvar no banco de dados: {e}")
         else:
