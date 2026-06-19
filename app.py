@@ -1,5 +1,4 @@
 # app.py
-# app.py
 import os
 import pandas as pd
 import streamlit as st
@@ -17,7 +16,9 @@ if "logado" not in st.session_state:
     st.session_state.logado = False
 
 def realizar_login(email_input, senha_input):
+    # Busca a lista de usuários cadastrada nos Secrets de forma invisível
     lista_usuarios = st.secrets["usuarios"]
+    
     if email_input in lista_usuarios and lista_usuarios[email_input] == senha_input:
         st.session_state.logado = True
         st.session_state.usuario_atual = email_input
@@ -38,58 +39,39 @@ if not st.session_state.logado:
         if botao_entrar:
             realizar_login(email_usuario, senha_usuario)
             
-    st.stop()
+    st.stop() # Trava a execução do script aqui até que o login seja aceito
 
-# --- A PARTIR DAQUI O USUÁRIO JÁ ESTÁ LOGADO ---
+# --- A PARTIR DAQUI O USUÁRIO JÁ ESTÁ LOGADO E O APP RODA NORMALMENTE ---
 
-# 1. DEFINIÇÃO DAS PÁGINAS (Defina apenas uma vez fora de loops ou blocos with)
+# 2. DEFINIÇÃO MANUAL DE NOME E ÍCONE DAS PÁGINAS DO MENU LATERAL
 pagina_painel = st.Page("app.py", title="Painel Principal", icon="📊", default=True)
 pagina_pedido = st.Page("pages/le_rel_pedido_compra.py", title="Pedidos de Compra", icon="📦")
 pagina_solicitacao = st.Page("pages/le_rel_sol_compra.py", title="Solicitações de Compra", icon="📥")
 pagina_lepdf = st.Page("pages/lepdf.py", title="Integrador LePDF", icon="📂")
 
-# Inicializa o ecossistema de navegação
+# Inicializa a estrutura do roteador de páginas do Streamlit
 pg = st.navigation([pagina_painel, pagina_pedido, pagina_solicitacao, pagina_lepdf])
 
-# 2. CONSTRUÇÃO DA SIDEBAR CORRIGIDA (Adicionando uma chave única ao botão para evitar conflito)
+# Barra lateral comum para exibir o usuário atual e o botão de Logout
 with st.sidebar:
     st.write(f"👤 Conectado como: **{st.session_state.usuario_atual}**")
     st.divider()
-    # Adicionamos o argumento 'key' para travar e individualizar esse botão no Streamlit
     if st.button("🚪 Sair do Sistema", use_container_width=True, key="btn_logout_global"):
         st.session_state.logado = False
         st.rerun()
 
-# 3. CONTROLE DE EXECUÇÃO CRUCIAL DO NAVEGADOR
-# Se a página atual selecionada for QUALQUER OUTRA que não seja o painel principal,
-# o pg.run() vai desviar o fluxo para lá e interromper este arquivo atual para não duplicar elementos.
-if st.session_state.get("current_page") != pg.current_path:
-    # Registra em qual rota o usuário está navegando para controle de estado
-    st.session_state["current_page"] = pg.current_path
+# 3. VALIDAÇÃO DE FLUXO DE EXECUÇÃO
+# Se a página mapeada na navegação for diferente do próprio "app.py", executa o arquivo dela e para por aqui.
+if pg != pagina_painel:
     pg.run()
-    st.stop() # Força a interrupção para evitar que o código de busca abaixo seja lido em páginas de upload
+    st.stop()
 
-# Executa o painel principal caso o operador esteja na página "default"
+# Se chegou até aqui, significa que o usuário clicou no "Painel Principal" (app.py)
+# Então executamos o motor de navegação para renderizar os elementos nativos do app.py
 pg.run()
 
-# Importação dos módulos desmembrados (Deixe as importações logo após o pg.run)
-from cenarios.cenario_a import renderizar_cenario_a
-from cenarios.cenario_b import renderizar_cenario_b
-from cenarios.cenario_c import renderizar_cenario_c
-# Inicializa o menu com os nomes configurados acima
-pg = st.navigation([pagina_painel, pagina_pedido, pagina_solicitacao, pagina_lepdf])
 
-# Renderiza a barra lateral customizada para Usuário e Logout
-with st.sidebar:
-    st.write(f"👤 Conectado como: **{st.session_state.usuario_atual}**")
-    st.divider()
-    if st.button("🚪 Sair do Sistema", use_container_width=True):
-        st.session_state.logado = False
-        st.rerun()
-
-# EXECUTA A NAVEGAÇÃO INTERNA DO STREAMLIT (Obrigatório)
-pg.run()
-
+# --- CONTEÚDO EXCLUSIVO DO PAINEL PRINCIPAL (SÓ RODA SE ESTIVER NA HOME) ---
 
 # Importação dos módulos desmembrados
 from cenarios.cenario_a import renderizar_cenario_a
@@ -111,7 +93,7 @@ def limpar_filtros():
     st.session_state.periodo = []
     st.session_state.filtro_status_cenario_c = ["NAO ATENDIDO", "PARCIAL"]
 
-#COR SUTIL PARA O STATUS
+# COR SUTIL PARA O STATUS
 def Skinner_status(valor):
     if valor in ['ATENDIDO', 'Pedido Atendido']:
         return 'background-color: #e6f4ea; color: #137333; font-weight: bold;'
