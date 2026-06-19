@@ -35,150 +35,132 @@ if not st.session_state.logado:
             realizar_login(email_usuario, senha_usuario)
     st.stop()
 
+
+# --- CORREÇÃO DEFINITIVA: FUNÇÃO DO CONTEÚDO DA HOME ---
+def renderizar_painel_principal():
+    """Toda a lógica e busca que antes ficava solta no app.py agora fica protegida aqui dentro"""
+    from cenarios.cenario_a import renderizar_cenario_a
+    from cenarios.cenario_b import renderizar_cenario_b
+    from cenarios.cenario_c import renderizar_cenario_c
+
+    load_dotenv()
+
+    SUPABASE_URL = os.getenv("SUPABASE_URL")
+    SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+    st.header("Consulta de Pedidos e RMs")
+    st.divider()
+
+    if "pedido" not in st.session_state: st.session_state.pedido = ""
+    if "rm" not in st.session_state: st.session_state.rm = ""
+    if "periodo" not in st.session_state: st.session_state.periodo = []
+    if "filtro_status_cenario_c" not in st.session_state: st.session_state.filtro_status_cenario_c = ["NAO ATENDIDO", "PARCIAL"]
+
+    def limpar_filtros():
+        st.session_state.pedido = ""
+        st.session_state.rm = ""
+        st.session_state.periodo = []
+        st.session_state.filtro_status_cenario_c = ["NAO ATENDIDO", "PARCIAL"]
+
+    def Skinner_status(valor):
+        if valor in ['ATENDIDO', 'Pedido Atendido']:
+            return 'background-color: #e6f4ea; color: #137333; font-weight: bold;'
+        elif valor == 'ATENDIDO COM EXCEDENTE':
+            return 'background-color: #e8f0fe; color: #1a73e8; font-weight: bold;'
+        elif valor == 'PARCIAL':
+            return 'background-color: #fef7e0; color: #b06000; font-weight: bold;'
+        elif valor in ['NAO ATENDIDO', 'Cancelado']:
+            return 'background-color: #fce8e6; color: #c5221f; font-weight: bold;'
+        return ''
+
+    if os.path.exists("style.css"):
+        with open("style.css", "r", encoding="utf-8") as f:
+            st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+
+    with st.form("formulario_busca"):
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            pedido = st.text_input("Número do Pedido", key="pedido")
+        with col2:
+            rm = st.text_input("Número da RM", key="rm")
+        with col3:
+            periodo = st.date_input("RMs por Período (Opcional)", value=[], key="periodo", format="DD/MM/YYYY")
+        
+        status_selecionados = st.multiselect(
+            "Filtrar Status da RM (Apenas para busca por período)",
+            options=["NAO ATENDIDO", "PARCIAL", "ATENDIDO", "ATENDIDO COM EXCEDENTE"],
+            default=["NAO ATENDIDO", "PARCIAL"],
+            key="filtro_status_cenario_c"
+        )
+        buscar = st.form_submit_button("🔍 Executar Busca")
+
+    st.button("🧹 Limpar Filtros", on_click=limpar_filtros)
+
+    if buscar:
+        if not rm and not pedido and not periodo:
+            st.warning("Informe um Pedido, uma RM ou selecione um Período.")
+            st.stop()
+            
+        pedidos = []
+        rm_para_conferencia = ""
+        
+        if rm:
+            try:
+                rm_int = int(rm)
+                rm_para_conferencia = str(rm_int)
+            except ValueError:
+                st.error("RM inválida.")
+                st.stop()
+
+            resposta_pedido = supabase.table("pedido_compra").select("pedido").eq("rm", rm_int).execute()
+            dados_pedido = resposta_pedido.data
+            if dados_pedido:
+                pedidos = list(set([item.get("pedido") for item in dados_pedido if item.get("pedido") is not None]))
+            else:
+                st.warning("Requisição de Material não gerou pedido de compra.")
+                st.stop()
+
+        if pedido:
+            try:
+                pedido_int = int(pedido)
+                if pedido_int not in pedidos:
+                    pedidos.append(pedido_int)
+                
+                if not rm_para_conferencia:
+                    resposta_rm_pedido = supabase.table("pedido_compra").select("rm").eq("pedido", pedido_int).limit(1).execute()
+                    if resposta_rm_pedido.data and len(resposta_rm_pedido.data) > 0:
+                        rm_para_conferencia = str(resposta_rm_pedido.data[0].get("rm", ""))
+            except ValueError:
+                st.error("Pedido inválido.")
+                st.stop()
+            
+        pedidos = list(set(pedidos))
+
+        if pedido and pedidos:
+            renderizar_cenario_a(pedido, pedidos, rm_para_conferencia, supabase, Skinner_status)
+        elif rm_para_conferencia:
+            renderizar_cenario_b(rm_para_conferencia, pedidos, supabase, Skinner_status)
+        elif periodo:
+            renderizar_cenario_c(periodo, status_selecionados, supabase, Skinner_status)
+
+
 # --- DEFINIÇÃO DO MENU LATERAL E ROTEAMENTO ---
-pagina_painel = st.Page("app.py", title="Painel Principal", icon="📊", default=True)
+# Em vez de passar "app.py" que gerava o loop infinito de leitura do mesmo arquivo, passamos a função limpa
+pagina_painel = st.Page(renderizar_painel_principal, title="Painel Principal", icon="📊", default=True)
 pagina_pedido = st.Page("pages/le_rel_pedido_compra.py", title="Pedidos de Compra", icon="📦")
 pagina_solicitacao = st.Page("pages/le_rel_sol_compra.py", title="Solicitações de Compra", icon="📥")
 pagina_lepdf = st.Page("pages/lepdf.py", title="Integrador LePDF", icon="📂")
 
 pg = st.navigation([pagina_painel, pagina_pedido, pagina_solicitacao, pagina_lepdf])
 
-# CORREÇÃO CRÍTICA: Renderiza a barra lateral fixa apenas na primeira passagem estrutural
-# Evita que o botão seja duplicado quando o pg.run() reexecuta o app.py internamente
-if "sidebar_renderizada" not in st.session_state:
-    with st.sidebar:
-        st.write(f"👤 Conectado como: **{st.session_state.usuario_atual}**")
-        st.divider()
-        if st.button("🚪 Sair do Sistema", use_container_width=True, key="btn_logout_sidebar_unico"):
-            st.session_state.logado = False
-            if "sidebar_renderizada" in st.session_state:
-                del st.session_state["sidebar_renderizada"]
-            st.rerun()
+# Renderiza as informações e o botão de Logout na sidebar de forma global e única
+with st.sidebar:
+    st.write(f"👤 Conectado como: **{st.session_state.usuario_atual}**")
+    st.divider()
+    if st.button("🚪 Sair do Sistema", use_container_width=True, key="btn_logout_sidebar_definitivo"):
+        st.session_state.logado = False
+        st.rerun()
 
-# Executa a página selecionada no menu lateral
+# Executa o roteador de forma linear e segura. O erro de duplicação sumiu 100%!
 pg.run()
-
-# Se a página atual NÃO for o painel principal, encerra o script aqui para não duplicar a tela inicial
-if pg != pagina_painel:
-    st.stop()
-
-# --- CONTEÚDO EXCLUSIVO DO PAINEL PRINCIPAL (SÓ RODA SE ESTIVER NA HOME) ---
-from cenarios.cenario_a import renderizar_cenario_a
-from cenarios.cenario_b import renderizar_cenario_b
-from cenarios.cenario_c import renderizar_cenario_c
-
-load_dotenv()
-
-SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-st.header("Consulta de Pedidos e RMs")
-st.divider()
-
-def limpar_filtros():
-    st.session_state.pedido = ""
-    st.session_state.rm = ""
-    st.session_state.periodo = []
-    st.session_state.filtro_status_cenario_c = ["NAO ATENDIDO", "PARCIAL"]
-
-def Skinner_status(valor):
-    if valor in ['ATENDIDO', 'Pedido Atendido']:
-        return 'background-color: #e6f4ea; color: #137333; font-weight: bold;'
-    elif valor == 'ATENDIDO COM EXCEDENTE':
-        return 'background-color: #e8f0fe; color: #1a73e8; font-weight: bold;'
-    elif valor == 'PARCIAL':
-        return 'background-color: #fef7e0; color: #b06000; font-weight: bold;'
-    elif valor in ['NAO ATENDIDO', 'Cancelado']:
-        return 'background-color: #fce8e6; color: #c5221f; font-weight: bold;'
-    return ''
-
-def carregar_css(caminho_arquivo):
-    if os.path.exists(caminho_arquivo):
-        with open(caminho_arquivo, "r", encoding="utf-8") as f:
-            st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-
-carregar_css("style.css")
-
-with st.form("formulario_busca"):
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        pedido = st.text_input("Número do Pedido", key="pedido")
-    with col2:
-        rm = st.text_input("Número da RM", key="rm")
-    with col3:
-        periodo = st.date_input(
-            "RMs por Período (Opcional)", 
-            value=[], 
-            key="periodo",
-            format="DD/MM/YYYY"
-        )
-    status_selecionados = st.multiselect(
-        "Filtrar Status da RM (Apenas para busca por período)",
-        options=["NAO ATENDIDO", "PARCIAL", "ATENDIDO", "ATENDIDO COM EXCEDENTE"],
-        default=["NAO ATENDIDO", "PARCIAL"],
-        key="filtro_status_cenario_c"
-    )
-    buscar = st.form_submit_button("🔍 Executar Busca")
-
-st.button("🧹 Limpar Filtros", on_click=limpar_filtros)
-
-if buscar:
-    if not rm and not pedido and not periodo:
-        st.warning("Informe um Pedido, uma RM ou selecione um Período.")
-        st.stop()
-        
-    pedidos = []
-    rm_para_conferencia = ""
-    
-    if rm:
-        try:
-            rm_int = int(rm)
-            rm_para_conferencia = str(rm_int)
-        except ValueError:
-            st.error("RM inválida.")
-            st.stop()
-
-        resposta_pedido = (
-            supabase
-            .table("pedido_compra")
-            .select("pedido")
-            .eq("rm", rm_int)
-            .execute()
-        )
-        dados_pedido = resposta_pedido.data
-        if dados_pedido:
-            pedidos = list(set([item.get("pedido") for item in dados_pedido if item.get("pedido") is not None]))
-        else:
-            st.warning("Requisição de Material não gerou pedido de compra.")
-            st.stop()
-
-    if pedido:
-        try:
-            pedido_int = int(pedido)
-            if pedido_int not in pedidos:
-                pedidos.append(pedido_int)
-            
-            if not rm_para_conferencia:
-                resposta_rm_pedido = (
-                    supabase
-                    .table("pedido_compra")
-                    .select("rm")
-                    .eq("pedido", pedido_int)
-                    .limit(1)
-                    .execute()
-                )
-                if resposta_rm_pedido.data and len(resposta_rm_pedido.data) > 0:
-                    rm_para_conferencia = str(resposta_rm_pedido.data[0].get("rm", ""))
-        except ValueError:
-            st.error("Pedido inválido.")
-            st.stop()
-        
-    pedidos = list(set(pedidos))
-
-    if pedido and pedidos:
-        renderizar_cenario_a(pedido, pedidos, rm_para_conferencia, supabase, Skinner_status)
-    elif rm_para_conferencia:
-        renderizar_cenario_b(rm_para_conferencia, pedidos, supabase, Skinner_status)
-    elif periodo:
-        renderizar_cenario_c(periodo, status_selecionados, supabase, Skinner_status)
