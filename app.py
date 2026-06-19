@@ -17,9 +17,7 @@ if "logado" not in st.session_state:
     st.session_state.logado = False
 
 def realizar_login(email_input, senha_input):
-    # Busca a lista de usuários cadastrada nos Secrets de forma invisível
     lista_usuarios = st.secrets["usuarios"]
-    
     if email_input in lista_usuarios and lista_usuarios[email_input] == senha_input:
         st.session_state.logado = True
         st.session_state.usuario_atual = email_input
@@ -40,15 +38,44 @@ if not st.session_state.logado:
         if botao_entrar:
             realizar_login(email_usuario, senha_usuario)
             
-    st.stop() # Trava a execução do script aqui até que o login seja aceito
+    st.stop()
 
-# --- A PARTIR DAQUI O USUÁRIO JÁ ESTÁ LOGADO E O APP RODA NORMALMENTE ---
+# --- A PARTIR DAQUI O USUÁRIO JÁ ESTÁ LOGADO ---
 
+# 1. DEFINIÇÃO DAS PÁGINAS (Defina apenas uma vez fora de loops ou blocos with)
 pagina_painel = st.Page("app.py", title="Painel Principal", icon="📊", default=True)
 pagina_pedido = st.Page("pages/le_rel_pedido_compra.py", title="Pedidos de Compra", icon="📦")
 pagina_solicitacao = st.Page("pages/le_rel_sol_compra.py", title="Solicitações de Compra", icon="📥")
 pagina_lepdf = st.Page("pages/lepdf.py", title="Integrador LePDF", icon="📂")
 
+# Inicializa o ecossistema de navegação
+pg = st.navigation([pagina_painel, pagina_pedido, pagina_solicitacao, pagina_lepdf])
+
+# 2. CONSTRUÇÃO DA SIDEBAR CORRIGIDA (Adicionando uma chave única ao botão para evitar conflito)
+with st.sidebar:
+    st.write(f"👤 Conectado como: **{st.session_state.usuario_atual}**")
+    st.divider()
+    # Adicionamos o argumento 'key' para travar e individualizar esse botão no Streamlit
+    if st.button("🚪 Sair do Sistema", use_container_width=True, key="btn_logout_global"):
+        st.session_state.logado = False
+        st.rerun()
+
+# 3. CONTROLE DE EXECUÇÃO CRUCIAL DO NAVEGADOR
+# Se a página atual selecionada for QUALQUER OUTRA que não seja o painel principal,
+# o pg.run() vai desviar o fluxo para lá e interromper este arquivo atual para não duplicar elementos.
+if st.session_state.get("current_page") != pg.current_path:
+    # Registra em qual rota o usuário está navegando para controle de estado
+    st.session_state["current_page"] = pg.current_path
+    pg.run()
+    st.stop() # Força a interrupção para evitar que o código de busca abaixo seja lido em páginas de upload
+
+# Executa o painel principal caso o operador esteja na página "default"
+pg.run()
+
+# Importação dos módulos desmembrados (Deixe as importações logo após o pg.run)
+from cenarios.cenario_a import renderizar_cenario_a
+from cenarios.cenario_b import renderizar_cenario_b
+from cenarios.cenario_c import renderizar_cenario_c
 # Inicializa o menu com os nomes configurados acima
 pg = st.navigation([pagina_painel, pagina_pedido, pagina_solicitacao, pagina_lepdf])
 
