@@ -56,18 +56,18 @@ pg = st.navigation([pagina_painel, pagina_pedido, pagina_solicitacao, pagina_lep
 with st.sidebar:
     st.write(f"👤 Conectado como: **{st.session_state.usuario_atual}**")
     st.divider()
-    if st.button("🚪 Sair do Sistema", use_container_width=True, key="btn_logout_global"):
+    # Chave alterada para evitar o erro de StreamlitDuplicateElementKey
+    if st.button("🚪 Sair do Sistema", use_container_width=True, key="btn_logout_sidebar"):
         st.session_state.logado = False
         st.rerun()
 
-# 3. VALIDAÇÃO DE FLUXO DE EXECUÇÃO
-# Se a página mapeada na navegação for diferente do próprio "app.py", executa o arquivo dela e para por aqui.
+# 3. VALIDAÇÃO E EXECUÇÃO DO ROTEADOR
+# Se a página atual NÃO for o painel principal, executa a subpágina correspondente e encerra.
 if pg != pagina_painel:
     pg.run()
     st.stop()
 
-# Se chegou até aqui, significa que o usuário clicou no "Painel Principal" (app.py)
-# Então executamos o motor de navegação para renderizar os elementos nativos do app.py
+# Se a página atual FOR o painel principal, executa o roteador uma única vez e continua lendo a home
 pg.run()
 
 
@@ -112,7 +112,7 @@ def carregar_css(caminho_arquivo):
 
 carregar_css("style.css")
 
-# FORMULARIO DE FILTROS (Antes da verificação lógica do "if buscar")
+# FORMULARIO DE FILTROS
 with st.form("formulario_busca"):
     col1, col2, col3 = st.columns(3)
 
