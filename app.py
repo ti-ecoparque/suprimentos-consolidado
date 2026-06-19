@@ -16,9 +16,7 @@ if "logado" not in st.session_state:
     st.session_state.logado = False
 
 def realizar_login(email_input, senha_input):
-    # Busca a lista de usuários cadastrada nos Secrets de forma invisível
     lista_usuarios = st.secrets["usuarios"]
-    
     if email_input in lista_usuarios and lista_usuarios[email_input] == senha_input:
         st.session_state.logado = True
         st.session_state.usuario_atual = email_input
@@ -26,54 +24,45 @@ def realizar_login(email_input, senha_input):
     else:
         st.error("E-mail ou senha incorretos. Tente novamente.")
 
-# RENDERIZA A TELA DE LOGIN CASO NÃO ESTEJA AUTENTICADO
 if not st.session_state.logado:
     st.markdown("<h2 style='text-align: center;'>🔒 Acesso Restrito - Suprimentos</h2>", unsafe_allow_html=True)
-    
     with st.form("form_login", clear_on_submit=False):
         st.write("Insira suas credenciais corporativas para acessar o painel:")
         email_usuario = st.text_input("E-mail")
         senha_usuario = st.text_input("Senha", type="password")
         botao_entrar = st.form_submit_button("Entrar no Painel")
-        
         if botao_entrar:
             realizar_login(email_usuario, senha_usuario)
-            
-    st.stop() # Trava a execução do script aqui até que o login seja aceito
+    st.stop()
 
-# --- A PARTIR DAQUI O USUÁRIO JÁ ESTÁ LOGADO E O APP RODA NORMALMENTE ---
-
-# 2. DEFINIÇÃO MANUAL DE NOME E ÍCONE DAS PÁGINAS DO MENU LATERAL
+# --- DEFINIÇÃO DO MENU LATERAL E ROTEAMENTO ---
 pagina_painel = st.Page("app.py", title="Painel Principal", icon="📊", default=True)
 pagina_pedido = st.Page("pages/le_rel_pedido_compra.py", title="Pedidos de Compra", icon="📦")
 pagina_solicitacao = st.Page("pages/le_rel_sol_compra.py", title="Solicitações de Compra", icon="📥")
 pagina_lepdf = st.Page("pages/lepdf.py", title="Integrador LePDF", icon="📂")
 
-# Inicializa a estrutura do roteador de páginas do Streamlit
 pg = st.navigation([pagina_painel, pagina_pedido, pagina_solicitacao, pagina_lepdf])
 
-# Barra lateral comum para exibir o usuário atual e o botão de Logout
-with st.sidebar:
-    st.write(f"👤 Conectado como: **{st.session_state.usuario_atual}**")
-    st.divider()
-    # Chave alterada para evitar o erro de StreamlitDuplicateElementKey
-    if st.button("🚪 Sair do Sistema", use_container_width=True, key="btn_logout_sidebar"):
-        st.session_state.logado = False
-        st.rerun()
+# CORREÇÃO CRÍTICA: Renderiza a barra lateral fixa apenas na primeira passagem estrutural
+# Evita que o botão seja duplicado quando o pg.run() reexecuta o app.py internamente
+if "sidebar_renderizada" not in st.session_state:
+    with st.sidebar:
+        st.write(f"👤 Conectado como: **{st.session_state.usuario_atual}**")
+        st.divider()
+        if st.button("🚪 Sair do Sistema", use_container_width=True, key="btn_logout_sidebar_unico"):
+            st.session_state.logado = False
+            if "sidebar_renderizada" in st.session_state:
+                del st.session_state["sidebar_renderizada"]
+            st.rerun()
 
-# 3. VALIDAÇÃO E EXECUÇÃO DO ROTEADOR
-# Se a página atual NÃO for o painel principal, executa a subpágina correspondente e encerra.
-if pg != pagina_painel:
-    pg.run()
-    st.stop()
-
-# Se a página atual FOR o painel principal, executa o roteador uma única vez e continua lendo a home
+# Executa a página selecionada no menu lateral
 pg.run()
 
+# Se a página atual NÃO for o painel principal, encerra o script aqui para não duplicar a tela inicial
+if pg != pagina_painel:
+    st.stop()
 
 # --- CONTEÚDO EXCLUSIVO DO PAINEL PRINCIPAL (SÓ RODA SE ESTIVER NA HOME) ---
-
-# Importação dos módulos desmembrados
 from cenarios.cenario_a import renderizar_cenario_a
 from cenarios.cenario_b import renderizar_cenario_b
 from cenarios.cenario_c import renderizar_cenario_c
@@ -93,7 +82,6 @@ def limpar_filtros():
     st.session_state.periodo = []
     st.session_state.filtro_status_cenario_c = ["NAO ATENDIDO", "PARCIAL"]
 
-# COR SUTIL PARA O STATUS
 def Skinner_status(valor):
     if valor in ['ATENDIDO', 'Pedido Atendido']:
         return 'background-color: #e6f4ea; color: #137333; font-weight: bold;'
@@ -112,16 +100,12 @@ def carregar_css(caminho_arquivo):
 
 carregar_css("style.css")
 
-# FORMULARIO DE FILTROS
 with st.form("formulario_busca"):
     col1, col2, col3 = st.columns(3)
-
     with col1:
         pedido = st.text_input("Número do Pedido", key="pedido")
-
     with col2:
         rm = st.text_input("Número da RM", key="rm")
-
     with col3:
         periodo = st.date_input(
             "RMs por Período (Opcional)", 
@@ -129,19 +113,16 @@ with st.form("formulario_busca"):
             key="periodo",
             format="DD/MM/YYYY"
         )
-
     status_selecionados = st.multiselect(
         "Filtrar Status da RM (Apenas para busca por período)",
         options=["NAO ATENDIDO", "PARCIAL", "ATENDIDO", "ATENDIDO COM EXCEDENTE"],
         default=["NAO ATENDIDO", "PARCIAL"],
         key="filtro_status_cenario_c"
     )
-
     buscar = st.form_submit_button("🔍 Executar Busca")
 
 st.button("🧹 Limpar Filtros", on_click=limpar_filtros)
 
-# PROCESSAMENTO DA CONSULTA PRINCIPAL
 if buscar:
     if not rm and not pedido and not periodo:
         st.warning("Informe um Pedido, uma RM ou selecione um Período.")
@@ -150,7 +131,6 @@ if buscar:
     pedidos = []
     rm_para_conferencia = ""
     
-    # 1. MAPEAMENTO DE RELACIONAMENTOS
     if rm:
         try:
             rm_int = int(rm)
@@ -196,12 +176,9 @@ if buscar:
         
     pedidos = list(set(pedidos))
 
-    # DISPARO MODULAR DOS CENÁRIOS
     if pedido and pedidos:
         renderizar_cenario_a(pedido, pedidos, rm_para_conferencia, supabase, Skinner_status)
-        
     elif rm_para_conferencia:
         renderizar_cenario_b(rm_para_conferencia, pedidos, supabase, Skinner_status)
-        
     elif periodo:
         renderizar_cenario_c(periodo, status_selecionados, supabase, Skinner_status)
