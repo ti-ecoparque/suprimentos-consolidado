@@ -49,7 +49,9 @@ with st.sidebar:
     st.write(f"👤 Conectado como: **{st.session_state.usuario_atual}**")
     
     # O Streamlit exige o nome de registro da página em minúsculas internamente
-    st.page_link("pages/lepdf.py", label="🔄 Integrador LePDF", icon="📂")
+    #st.page_link("pages/lepdf.py", label="🔄 Integrador LePDF", icon="📂")
+    pagina_painel = st.Page("app.py", title="Painel Principal", icon="📊", default=True)
+    pagina_lepdf = st.Page("pages/lepdf.py", title="Integrador LePDF", icon="📂")
     
     st.divider()
     if st.button("🚪 Sair do Sistema"):
