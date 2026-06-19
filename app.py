@@ -44,19 +44,24 @@ if not st.session_state.logado:
 
 # --- A PARTIR DAQUI O USUÁRIO JÁ ESTÁ LOGADO E O APP RODA NORMALMENTE ---
 
-# Barra lateral para exibir o usuário atual e botão de Logout
+pagina_painel = st.Page("app.py", title="Painel Principal", icon="📊", default=True)
+pagina_pedido = st.Page("pages/le_rel_pedido_compra.py", title="Pedidos de Compra", icon="📦")
+pagina_solicitacao = st.Page("pages/le_rel_sol_compra.py", title="Solicitações de Compra", icon="📥")
+pagina_lepdf = st.Page("pages/lepdf.py", title="Integrador LePDF", icon="📂")
+
+# Inicializa o menu com os nomes configurados acima
+pg = st.navigation([pagina_painel, pagina_pedido, pagina_solicitacao, pagina_lepdf])
+
+# Renderiza a barra lateral customizada para Usuário e Logout
 with st.sidebar:
     st.write(f"👤 Conectado como: **{st.session_state.usuario_atual}**")
-    
-    # O Streamlit exige o nome de registro da página em minúsculas internamente
-    #st.page_link("pages/lepdf.py", label="🔄 Integrador LePDF", icon="📂")
-    pagina_painel = st.Page("app.py", title="Painel Principal", icon="📊", default=True)
-    pagina_lepdf = st.Page("pages/lepdf.py", title="Integrador LePDF", icon="📂")
-    
     st.divider()
-    if st.button("🚪 Sair do Sistema"):
+    if st.button("🚪 Sair do Sistema", use_container_width=True):
         st.session_state.logado = False
         st.rerun()
+
+# EXECUTA A NAVEGAÇÃO INTERNA DO STREAMLIT (Obrigatório)
+pg.run()
 
 
 # Importação dos módulos desmembrados
