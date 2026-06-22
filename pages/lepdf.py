@@ -4,14 +4,13 @@ import re
 import streamlit as st
 import pandas as pd
 from pypdf import PdfReader
-from database.banco import salvar_itens_no_banco
-from supabase import create_client
+from database.banco import salvar_itens_no_banco, supabase
 from datetime import datetime
 
 # 1. VALIDAÇÃO DE SEGURANÇA
 if "logado" not in st.session_state or not st.session_state.logado:
     st.warning("🔒 Acesso restrito. Por favor, faça login na página principal.")
-    if st.button("Ir para o Login"):
+    if st.button("Ir para o Login", key="btn_redirect_login"):
         st.switch_page("app.py")
     st.stop()
 
@@ -31,13 +30,7 @@ if "mostrar_tabela_resumo" not in st.session_state:
     st.session_state.mostrar_tabela_resumo = False
     st.session_state.dados_resumo = []
     st.session_state.total_linhas_importadas = 0
-    st.session_state.total_arquivos_ignorados = 0
-    st.session_state.mensagem_tipo = "" # 'sucesso' ou 'aviso_tudo_duplicado'
-
-# 2. CONEXÃO COM O SUPABASE
-SUPABASE_URL = st.secrets["SUPABASE_URL"]
-SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+    st.session_state.mensagem_tipo = ""
 
 st.header("🔄 Área Administrativa - Integrador de Pedidos")
 st.write(f"👤 Conectado como: **{st.session_state.usuario_atual}**")
@@ -56,22 +49,14 @@ arquivos_enviados = st.file_uploader(
 if arquivos_enviados:
     st.metric(label="PDFs carregados para processamento", value=len(arquivos_enviados))
     
-    if st.button("🚀 Iniciar Processamento dos PDFs", use_container_width=True):
-        # Consulta de histórico no Supabase para evitar duplicidade
-        with st.spinner("Consultando registros existentes no Supabase..."):
-            try:
-                resposta_existentes = supabase.table("pedido_compra").select("rm, pedido, mat").execute()
-                registros_existentes = {(item["rm"], item["pedido"], item["mat"]) for item in resposta_existentes.data}
-            except Exception as e:
-                st.error(f"Erro ao consultar o histórico do banco: {e}")
-                st.stop()
-
+    if st.button("🚀 Iniciar Processamento dos PDFs", use_container_width=True, key="btn_processar_pdfs"):
+        
         todos_os_registros = []
         resumo_processamento = []
-        arquivos_ignorados = 0
         
         progresso = st.progress(0, text="Analisando arquivos...")
         
+        # --- LOOP ÚNICO DE EXTRAÇÃO EM MEMÓRIA ---
         for idx, arquivo_buffer in enumerate(arquivos_enviados):
             progresso.progress((idx + 1) / len(arquivos_enviados), text=f"Processando: {arquivo_buffer.name}")
             
@@ -110,7 +95,7 @@ if arquivos_enviados:
                 if pos_obs == -1: pos_obs = texto_completo.lower().find("complementar")
                 if pos_obs != -1:
                     linhas_texto = texto_completo[pos_obs:].split("\n")
-                    if linhas_texto: observacao = linhas_texto[0].strip()
+                    if lines_texto: observacao = linhas_texto[0].strip()
 
                 entregas_agendadas = []
                 for parte in texto_completo.split():
@@ -118,10 +103,9 @@ if arquivos_enviados:
                         d_conv = converter_data(parte)
                         if d_conv and d_conv not in entregas_agendadas: entregas_agendadas.append(d_conv)
 
-                # Varredura das linhas de itens
+                # Varredura das linhas de itens do arquivo atual
                 linhas_do_pdf = texto_completo.split("\n")
                 codigos_materiais_novos = []
-                contem_item_novo = False
                 
                 for linha in linhas_do_pdf:
                     linha_limpa = linha.strip()
@@ -133,14 +117,6 @@ if arquivos_enviados:
                         if codigo_material.isdigit() and len(codigo_material) <= 9:
                             mat_int = int(codigo_material)
                             
-                            # TRAVA CIRÚRGICA LINHA POR LINHA
-                            chave_linha = (rm_resultado, pedido_resultado, mat_int)
-                            
-                            if chave_linha in registros_existentes:
-                                continue # Pula apenas este item repetido
-                            
-                            # Se for item novo, computa no pacote
-                            contem_item_novo = True
                             codigos_materiais_novos.append(codigo_material)
                             todos_os_registros.append({
                                 "rm": rm_resultado,
@@ -153,67 +129,59 @@ if arquivos_enviados:
                                 "entregas_agendadas": entregas_agendadas
                             })
 
-                if contem_item_novo:
-                    resumo_processamento.append({
-                        "Pedido": pedido_resultado if pedido_resultado else "N/A",
-                        "RM": rm_resultado if rm_resultado else "N/A",
-                        "Materiais": ", ".join(sorted(list(set(codigos_materiais_novos)))),
-                        "CNPJ Fornecedor": cnpj if cnpj else "N/A",
-                        "Status": "Importado"
-                    })
-                else:
-                    arquivos_ignorados += 1
+                # Monta a prévia da linha para a tabela mesmo antes do envio
+                resumo_processamento.append({
+                    "Pedido": pedido_resultado if pedido_resultado else "N/A",
+                    "RM": rm_resultado if rm_resultado else "N/A",
+                    "Materiais": ", ".join(sorted(list(set(codigos_materiais_novos)))),
+                    "CNPJ Fornecedor": cnpj if cnpj else "N/A",
+                    "Status": "Enviado para Análise"
+                })
                     
             except Exception as e:
                 st.error(f"⚠️ Falha ao ler o arquivo {arquivo_buffer.name}: {e}")
                 continue
 
-        # Envio em bloco para o Supabase e controle das mensagens na sessão
+        # --- DISPARO EM LOTE ÚNICO COM TRAVA DE RETORNO DO UPSERT ---
         if todos_os_registros:
             try:
-                salvar_itens_no_banco(todos_os_registros)
+                # O banco.py agora usa .upsert() com ignore_duplicates=True
+                resposta = salvar_itens_no_banco(todos_os_registros)
+                
+                # Se resposta.data contiver itens, significa que novas linhas foram inseridas de fato
+                linhas_inseridas = len(resposta.data) if (resposta and resposta.data) else 0
                 
                 st.session_state.mostrar_tabela_resumo = True
                 st.session_state.dados_resumo = resumo_processamento
-                st.session_state.total_linhas_importadas = len(todos_os_registros)
-                st.session_state.total_arquivos_ignorados = arquivos_ignorados
-                st.session_state.mensagem_tipo = "sucesso"
+                st.session_state.total_linhas_importadas = linhas_inseridas
                 
-                st.session_state.id_upload += 1
-                st.rerun()
-                
-            except Exception as e:
-                st.error(f"Erro crítico ao salvar no banco de dados: {e}")
+                if linhas_inseridas > 0:
+                    st.session_state.mensagem_tipo = "sucesso"
+                else:
+                    st.session_state.mensagem_tipo = "tudo_duplicado"
+                    
+            except Exception as error_banco:
+                st.error(f"❌ Erro operacional com o Supabase: {error_banco}")
         else:
-            st.session_state.mostrar_tabela_resumo = True
-            st.session_state.dados_resumo = []
-            st.session_state.total_arquivos_ignorados = len(arquivos_enviados)
-            st.session_state.mensagem_tipo = "aviso_tudo_duplicado"
+            st.warning("Nenhum dado pôde ser extraído dos arquivos anexados.")
             
-            st.session_state.id_upload += 1
-            st.rerun()
+        st.rerun()
 
-# --- BLOCO DE EXIBIÇÃO PERSISTENTE (O código lê as mensagens daqui pós-reload) ---
-if st.session_state.mostrar_tabela_resumo:
-    st.write("---") # Divisor sutil
+# --- 4. EXIBIÇÃO HISTÓRICA DO RELATÓRIO APÓS RERUN ---
+if st.session_state.get("mostrar_tabela_resumo"):
     
     if st.session_state.mensagem_tipo == "sucesso":
-        st.success(f"✔️ Sucesso! {st.session_state.total_linhas_importadas} novos itens cadastrados no banco de dados!")
-        if st.session_state.total_arquivos_ignorados > 0:
-            st.info(f"ℹ️ {st.session_state.total_arquivos_ignorados} arquivo(s) foram ignorados por já existirem no histórico.")
-            
-    elif st.session_state.mensagem_tipo == "aviso_tudo_duplicado":
-        st.warning(f"🎉 Todos os {st.session_state.total_arquivos_ignorados} arquivos enviados já haviam sido importados anteriormente no Supabase!")
+        st.success(f"✔ Processamento concluído! **{st.session_state.total_linhas_importadas}** novos registros foram sincronizados com sucesso!")
+    elif st.session_state.mensagem_tipo == "tudo_duplicado":
+        st.warning("⚠ Operação concluída: Todos os pedidos enviados já existiam no banco e foram ignorados para evitar duplicidade.")
 
-    # Só renderiza a tabela se de fato houver novos dados cadastrados nessa rodada
-    if st.session_state.dados_resumo:
-        st.subheader("📋 Relatório de Arquivos Processados Nesta Rodada")
-        df_resumo = pd.DataFrame(st.session_state.dados_resumo)
-        st.dataframe(df_resumo, use_container_width=True, hide_index=True)
-    
-    # Botão para o usuário limpar as notificações antigas quando desejar
-    if st.button("🧹 Limpar Histórico do Terminal / Mensagens"):
+    st.subheader("📋 Relatório de Arquivos Processados Nesta Rodada")
+    df_resumo = pd.DataFrame(st.session_state.dados_resumo)
+    st.dataframe(df_resumo, use_container_width=True, hide_index=True)
+
+    if st.button("🧹 Limpar Histórico do Terminal / Mensagens", key="btn_limpar_historico"):
         st.session_state.mostrar_tabela_resumo = False
         st.session_state.dados_resumo = []
-        st.session_state.mensagem_tipo = ""
+        st.session_state.total_linhas_importadas = 0
+        st.session_state.id_upload += 1  # Reseta o file_uploader da tela limpando os arquivos antigos
         st.rerun()

@@ -1,3 +1,4 @@
+# database/banco.py
 import os
 from dotenv import load_dotenv
 from supabase import create_client, Client
@@ -14,14 +15,28 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-#Recebe uma lista de dicionários e insere na tabela 'pedidos_materiais' do Supabase.
+
 def salvar_itens_no_banco(lista_itens):
+    """Recebe uma lista de dicionários e realiza o upsert seguro na tabela 'pedido_compra'."""
     if not lista_itens:
-        return
+        return None
+        
     try:
-        # Realiza o insert em lote (bulk insert) para maior performance
-        resposta = supabase.table("pedido_compra").insert(lista_itens).execute()
-        print(f"✔️ {len(lista_itens)} registros salvos com sucesso no Supabase!")
+        # 🚀 MUDANÇA CRUCIAL: Trocado .insert() por .upsert() com travas físicas de duplicados
+        resposta = (
+            supabase
+            .table("pedido_compra")
+            .upsert(
+                lista_itens,
+                on_conflict="rm,pedido,mat",  # Nome das colunas da sua restrição UNIQUE do banco
+                ignore_duplicates=True        # Diz ao Postgres para pular e não duplicar se já existir
+            )
+            .execute()
+        )
+        
+        print(f"✔️ Processamento de lote concluído no Supabase!")
         return resposta
+        
     except Exception as e:
         print(f"Erro ao salvar dados no Supabase: {e}")
+        raise e  # Repassa o erro para que o frontend st.error consiga capturar o log técnico
