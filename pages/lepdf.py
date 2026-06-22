@@ -38,7 +38,7 @@ st.divider()
 
 st.write("📌 **Instruções:** Selecione ou arraste um ou mais arquivos PDF de pedidos de compra diretamente para o campo abaixo para realizar a importação automática para o banco de dados.")
 
-# 3. CAMPO DE UPLOAD NATIVO (Chave dinâmica para resetar e limpar a caixa cinza)
+# 3. CAMPO DE UPLOAD NATIVO
 arquivos_enviados = st.file_uploader(
     "Arraste os arquivos PDF aqui", 
     type=["pdf"], 
@@ -95,7 +95,7 @@ if arquivos_enviados:
                 if pos_obs == -1: pos_obs = texto_completo.lower().find("complementar")
                 if pos_obs != -1:
                     linhas_texto = texto_completo[pos_obs:].split("\n")
-                    if lines_texto: observacao = linhas_texto[0].strip()
+                    if linhas_texto: observacao = linhas_texto[0].strip()
 
                 entregas_agendadas = []
                 for parte in texto_completo.split():
@@ -135,7 +135,7 @@ if arquivos_enviados:
                     "RM": rm_resultado if rm_resultado else "N/A",
                     "Materiais": ", ".join(sorted(list(set(codigos_materiais_novos)))),
                     "CNPJ Fornecedor": cnpj if cnpj else "N/A",
-                    "Status": "Enviado para Análise"
+                    "Status": "Processado"
                 })
                     
             except Exception as e:
@@ -145,10 +145,7 @@ if arquivos_enviados:
         # --- DISPARO EM LOTE ÚNICO COM TRAVA DE RETORNO DO UPSERT ---
         if todos_os_registros:
             try:
-                # O banco.py agora usa .upsert() com ignore_duplicates=True
                 resposta = salvar_itens_no_banco(todos_os_registros)
-                
-                # Se resposta.data contiver itens, significa que novas linhas foram inseridas de fato
                 linhas_inseridas = len(resposta.data) if (resposta and resposta.data) else 0
                 
                 st.session_state.mostrar_tabela_resumo = True
@@ -165,10 +162,11 @@ if arquivos_enviados:
         else:
             st.warning("Nenhum dado pôde ser extraído dos arquivos anexados.")
             
-        st.rerun()
+        # ❌ REMOVIDO: st.rerun() daqui de dentro para não fazer a tela piscar e sumir os dados
 
-# --- 4. EXIBIÇÃO HISTÓRICA DO RELATÓRIO APÓS RERUN ---
+# --- 4. EXIBIÇÃO HISTÓRICA DO RELATÓRIO ---
 if st.session_state.get("mostrar_tabela_resumo"):
+    st.divider()
     
     if st.session_state.mensagem_tipo == "sucesso":
         st.success(f"✔ Processamento concluído! **{st.session_state.total_linhas_importadas}** novos registros foram sincronizados com sucesso!")
