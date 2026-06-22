@@ -28,7 +28,8 @@ if "id_upload" not in st.session_state:
 
 if "mostrar_tabela_resumo" not in st.session_state:
     st.session_state.mostrar_tabela_resumo = False
-    st.session_state.dados_resumo = []
+    st.session_state.dados_validos = []
+    st.session_state.dados_ignorados = []
     st.session_state.total_linhas_importadas = 0
     st.session_state.mensagem_tipo = ""
 
@@ -52,7 +53,10 @@ if arquivos_enviados:
     if st.button("🚀 Iniciar Processamento dos PDFs", use_container_width=True, key="btn_processar_pdfs"):
         
         todos_os_registros = []
-        resumo_processamento = []
+        mapa_cnpjs = {}
+        todos_os_pedidos_lidos = set()
+        mapa_pedido_rm = {}
+        mapa_pedido_materiais = {}
         
         progresso = st.progress(0, text="Analisando arquivos...")
         
@@ -82,6 +86,11 @@ if arquivos_enviados:
                 padrao_cnpj = re.search(r"\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}", texto_completo)
                 if padrao_cnpj: cnpj = padrao_cnpj.group(0)
 
+                if pedido_resultado:
+                    todos_os_pedidos_lidos.add(pedido_resultado)
+                    if cnpj: mapa_cnpjs[pedido_resultado] = cnpj
+                    if rm_resultado: mapa_pedido_rm[pedido_resultado] = rm_resultado
+
                 emissao = None
                 padrao_emissao = re.search(r"emiss.*:\s*(\d{2}/\d{2}/\d{4})", texto_completo, re.IGNORECASE)
                 if padrao_emissao: emissao = converter_data(padrao_emissao.group(1))
@@ -105,8 +114,10 @@ if arquivos_enviados:
 
                 # Varredura das linhas de itens do arquivo atual
                 linhas_do_pdf = texto_completo.split("\n")
-                codigos_materiais_novos = []
                 
+                if pedido_resultado not in mapa_pedido_materiais:
+                    mapa_pedido_materiais[pedido_resultado] = set()
+
                 for linha in linhas_do_pdf:
                     linha_limpa = linha.strip()
                     if not linha_limpa: continue
@@ -116,8 +127,8 @@ if arquivos_enviados:
                         codigo_material = partes[0]
                         if codigo_material.isdigit() and len(codigo_material) <= 9:
                             mat_int = int(codigo_material)
+                            mapa_pedido_materiais[pedido_resultado].add(str(mat_int))
                             
-                            codigos_materiais_novos.append(codigo_material)
                             todos_os_registros.append({
                                 "rm": rm_resultado,
                                 "pedido": pedido_resultado,
@@ -128,58 +139,94 @@ if arquivos_enviados:
                                 "observacao": observacao,
                                 "entregas_agendadas": entregas_agendadas
                             })
-
-                # Monta a prévia da linha para a tabela mesmo antes do envio
-                resumo_processamento.append({
-                    "Pedido": pedido_resultado if pedido_resultado else "N/A",
-                    "RM": rm_resultado if rm_resultado else "N/A",
-                    "Materiais": ", ".join(sorted(list(set(codigos_materiais_novos)))),
-                    "CNPJ Fornecedor": cnpj if cnpj else "N/A",
-                    "Status": "Processado"
-                })
                     
             except Exception as e:
                 st.error(f"⚠️ Falha ao ler o arquivo {arquivo_buffer.name}: {e}")
                 continue
 
-        # --- DISPARO EM LOTE ÚNICO COM TRAVA DE RETORNO DO UPSERT ---
+        # --- DISPARO EM LOTE ÚNICO E SEPARAÇÃO DE VÁLIDOS VS IGNORADOS ---
         if todos_os_registros:
             try:
                 resposta = salvar_itens_no_banco(todos_os_registros)
-                linhas_inseridas = len(resposta.data) if (resposta and resposta.data) else 0
+                dados_inseridos_reais = resposta.data if (resposta and resposta.data) else []
+                linhas_inseridas = len(dados_inseridos_reais)
                 
                 st.session_state.mostrar_tabela_resumo = True
-                st.session_state.dados_resumo = resumo_processamento
                 st.session_state.total_linhas_importadas = linhas_inseridas
+                
+                # Identifica quais pedidos foram aceitos pelo banco de dados
+                pedidos_inseridos_reais = set()
+                resumo_validos = []
                 
                 if linhas_inseridas > 0:
                     st.session_state.mensagem_tipo = "sucesso"
+                    df_retorno = pd.DataFrame(dados_inseridos_reais)
+                    
+                    # Agrupa o retorno real do banco por pedido e RM
+                    for (ped, rm_num), sub_df in df_retorno.groupby(["pedido", "rm"]):
+                        ped_int = int(ped)
+                        pedidos_inseridos_reais.add(ped_int)
+                        materiais_lista = sorted(list(set(sub_df["mat"].astype(str).tolist())))
+                        
+                        resumo_validos.append({
+                            "Pedido": ped_int,
+                            "RM": int(rm_num),
+                            "Materiais": ", ".join(materials_lista),
+                            "CNPJ Fornecedor": mapa_cnpjs.get(ped_int, "N/A"),
+                            "Status": "Processado e Salvo"
+                        })
                 else:
                     st.session_state.mensagem_tipo = "tudo_duplicado"
+                
+                # Descobre quais pedidos foram completamente ignorados (estavam lidos mas não foram inseridos)
+                pedidos_ignorados_reais = todos_os_pedidos_lidos - pedidos_inseridos_reais
+                resumo_ignorados = []
+                
+                for ped_img in pedidos_ignorados_reais:
+                    materiais_rejeitados = sorted(list(mapa_pedido_materiais.get(ped_img, ["N/A"])))
+                    resumo_ignorados.append({
+                        "Pedido": ped_img,
+                        "RM": mapa_pedido_rm.get(ped_img, "N/A"),
+                        "Materiais Rejeitados": ", ".join(materiais_rejeitados),
+                        "CNPJ Fornecedor": mapa_cnpjs.get(ped_img, "N/A"),
+                        "Status": "Ignorado (Já Existe)"
+                    })
+                
+                st.session_state.dados_validos = resumo_validos
+                st.session_state.dados_ignorados = resumo_ignorados
                     
             except Exception as error_banco:
                 st.error(f"❌ Erro operacional com o Supabase: {error_banco}")
         else:
-            st.warning("Nenhum dado pôde ser extraído dos arquivos anexados.")
-            
-        # ❌ REMOVIDO: st.rerun() daqui de dentro para não fazer a tela piscar e sumir os dados
+            st.warning("Nenhum data pôde ser extraído dos arquivos anexados.")
 
-# --- 4. EXIBIÇÃO HISTÓRICA DO RELATÓRIO ---
+# --- 4. EXIBIÇÃO DETALHADA DOS DOIS RELATÓRIOS FIXADOS NA TELA ---
 if st.session_state.get("mostrar_tabela_resumo"):
     st.divider()
     
+    # Exibe o alerta principal de status do lote
     if st.session_state.mensagem_tipo == "sucesso":
-        st.success(f"✔ Processamento concluído! **{st.session_state.total_linhas_importadas}** novos registros foram sincronizados com sucesso!")
+        st.success(f"✔ Processamento concluído! **{st.session_state.total_linhas_importadas}** novos registros de materiais foram sincronizados!")
     elif st.session_state.mensagem_tipo == "tudo_duplicado":
-        st.warning("⚠ Operação concluída: Todos os pedidos enviados já existiam no banco e foram ignorados para evitar duplicidade.")
+        st.warning("⚠ Operação concluída: Todos os pedidos enviados já existiam no banco de dados.")
 
-    st.subheader("📋 Relatório de Arquivos Processados Nesta Rodada")
-    df_resumo = pd.DataFrame(st.session_state.dados_resumo)
-    st.dataframe(df_resumo, use_container_width=True, hide_index=True)
+    # 🟢 TABELA 1: EXIBE OS VALIDOS DESTA RODADA
+    if st.session_state.get("dados_validos"):
+        st.subheader("📋 Relatório de Arquivos Processados Nesta Rodada (Válidos)")
+        df_validos = pd.DataFrame(st.session_state.dados_validos)
+        st.dataframe(df_validos, use_container_width=True, hide_index=True)
 
+    # 🟡 TABELA 2: EXIBE OS IGNORADOS DA RODADA (DUPLICADOS)
+    if st.session_state.get("dados_ignorados"):
+        st.subheader("🚨 Relatório de Pedidos Bloqueados (Já Existentes / Ignorados)")
+        df_ignorados = pd.DataFrame(st.session_state.dados_ignorados)
+        st.dataframe(df_ignorados, use_container_width=True, hide_index=True)
+
+    # Botão de reset para limpar a tela e liberar para o próximo lote
     if st.button("🧹 Limpar Histórico do Terminal / Mensagens", key="btn_limpar_historico"):
         st.session_state.mostrar_tabela_resumo = False
-        st.session_state.dados_resumo = []
+        st.session_state.dados_validos = []
+        st.session_state.dados_ignorados = []
         st.session_state.total_linhas_importadas = 0
-        st.session_state.id_upload += 1  # Reseta o file_uploader da tela limpando os arquivos antigos
+        st.session_state.id_upload += 1  # Reseta o campo file_uploader limpando a caixa cinza
         st.rerun()
