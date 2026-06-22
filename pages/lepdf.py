@@ -171,7 +171,7 @@ if arquivos_enviados:
                         resumo_validos.append({
                             "Pedido": ped_int,
                             "RM": int(rm_num),
-                            "Materiais": ", ".join(materials_lista),
+                            "Materiais": ", ".join(materiais_lista), # ✔ Corrigido!
                             "CNPJ Fornecedor": mapa_cnpjs.get(ped_int, "N/A"),
                             "Status": "Processado e Salvo"
                         })
