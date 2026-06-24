@@ -4,4 +4,3 @@ python-dotenv
 supabase
 pypdf
 xlrd
-extra-streamlit-components
