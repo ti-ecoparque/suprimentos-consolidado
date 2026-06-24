@@ -1,11 +1,12 @@
 # app.py
 import os
+import time
 import pandas as pd
 import streamlit as st
-from datetime import datetime, timedelta # 👈 Adicionado timedelta para calcular a validade
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from supabase import create_client
-from streamlit_cookies_controller import CookieController
+import extra_streamlit_components as stx # 👈 Nova biblioteca estável
 
 # 1. CONFIGURAÇÃO DA PÁGINA (OBRIGATORIAMENTE O PRIMEIRO COMANDO)
 st.set_page_config(
@@ -13,9 +14,12 @@ st.set_page_config(
     layout="wide"
 )
 
-# Inicializa o controlador de cookies local do navegador
-controller = CookieController()
+# Inicializa o gerenciador de cookies persistente
+@st.cache_resource
+def obter_gerenciador_cookies():
+    return stx.CookieManager()
 
+cookie_manager = obter_gerenciador_cookies()
 
 # --- 2. FUNÇÃO DO CONTEÚDO DA HOME (PROTEGIDA) ---
 def renderizar_painel_principal():
@@ -135,13 +139,16 @@ pagina_lepdf = st.Page("pages/lepdf.py", title="Integrador LePDF", icon="📂")
 pg = st.navigation([pagina_painel, pagina_pedido, pagina_solicitacao, pagina_lepdf])
 
 
-# --- 4. SISTEMA DE LOGIN SEGURO (SECRETS + COOKIES PERSISTENTES) ---
+# --- 4. SISTEMA DE LOGIN SEGURO (SECRETS + EXTRA COOKIES) ---
 if "logado" not in st.session_state:
     st.session_state.logado = False
 
-# AUTO-LOGIN: Tenta restaurar a sessão persistida pelo cookie no navegador
+# AUTO-LOGIN INTELIGENTE: Aguarda de forma segura a resposta assíncrona do navegador
 if not st.session_state.logado:
-    cookie_usuario = controller.get("ecoparque_user_session")
+    # Pequeno atraso preventivo (apenas 0.1s) para dar tempo de carregar o componente do navegador
+    time.sleep(0.1)
+    cookie_usuario = cookie_manager.get(cookie="ecoparque_session_id")
+    
     if cookie_usuario:
         lista_usuarios = st.secrets["usuarios"]
         if cookie_usuario in lista_usuarios:
@@ -155,14 +162,12 @@ def realizar_login(email_input, senha_input, lembrar_usuario):
         st.session_state.logado = True
         st.session_state.usuario_atual = email_input
         
-        # 🚀 CORREÇÃO CIRÚRGICA: Configura uma data de expiração fixa de 30 dias no navegador
+        # Se marcou para salvar, armazena no navegador com expiração para 30 dias
         if lembrar_usuario:
-            data_expiracao = datetime.now() + timedelta(days=30)
-            controller.set(
-                "ecoparque_user_session", 
-                email_input, 
-                expires=data_expiracao, # 👈 Passa a data calculada aqui
-                path="/"
+            cookie_manager.set(
+                cookie="ecoparque_session_id", 
+                value=email_input,
+                expires_at=datetime.now() + timedelta(days=30)
             )
             
         st.rerun()
@@ -177,7 +182,7 @@ if not st.session_state.logado:
         email_usuario = st.text_input("E-mail")
         senha_usuario = st.text_input("Senha", type="password")
         lembrar = st.checkbox("Manter-me conectado neste computador")
-        botao_entrar = st.form_submit_button("Entrar no Panel")
+        botao_entrar = st.form_submit_button("Entrar no Painel")
         if botao_entrar:
             realizar_login(email_usuario, senha_usuario, lembrar)
             
@@ -190,7 +195,8 @@ with st.sidebar:
     st.divider()
     if st.button("🚪 Sair do Sistema", use_container_width=True, key="btn_logout_sidebar_definitivo"):
         st.session_state.logado = False
-        controller.remove("ecoparque_user_session", path="/") # Deleta limpando o caminho raiz
+        # Remove o cookie limpando o rastro local permanentemente
+        cookie_manager.delete(cookie="ecoparque_session_id")
         st.rerun()
 
 # Renderiza a página ativa com segurança

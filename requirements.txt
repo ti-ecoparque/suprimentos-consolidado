@@ -4,4 +4,4 @@ python-dotenv
 supabase
 pypdf
 xlrd
-streamlit-cookies-controller
+extra-streamlit-components
