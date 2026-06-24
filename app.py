@@ -15,11 +15,7 @@ st.set_page_config(
 )
 
 # Inicializa o gerenciador de cookies persistente
-@st.cache_resource
-def obter_gerenciador_cookies():
-    return stx.CookieManager()
-
-cookie_manager = obter_gerenciador_cookies()
+cookie_manager = stx.CookieManager(key="gerenciador_cookies_global")
 
 # --- 2. FUNÇÃO DO CONTEÚDO DA HOME (PROTEGIDA) ---
 def renderizar_painel_principal():
