@@ -159,24 +159,24 @@ def realizar_login(email_input, senha_input, lembrar_usuario):
         st.session_state.usuario_atual = email_input
         
         if lembrar_usuario:
-            # Configura um prazo de expiração nativo válido por 30 dias
-            prazo_expiracao = datetime.now() + timedelta(days=30)
+            # 🚀 SOLUÇÃO: Converte a expiração para uma String em formato ISO/UTC limpo.
+            # O componente JavaScript do navegador lê strings de data perfeitamente em JSON.
+            prazo_string = (datetime.now() + timedelta(days=30)).isoformat()
             
-            # A biblioteca stx.CookieManager aceita a expiração diretamente como o terceiro argumento posicional,
-            # ou passando como uma string/datetime válida sem conflito de assinatura de método.
             try:
                 cookie_manager.set(
                     cookie="ecoparque_session_id", 
                     value=email_input,
-                    expires_at=prazo_expiracao
+                    expires_at=prazo_string # 👈 Enviando como String, o erro de JSON some!
                 )
-            except TypeError:
-                # Caso a versão instalada use a assinatura antiga posicional (cookie, value, expires_at)
-                cookie_manager.set("ecoparque_session_id", email_input, prazo_expiracao)
+            except Exception:
+                # Fallback caso a assinatura exija argumentos posicionais brutos
+                cookie_manager.set("ecoparque_session_id", email_input, prazo_string)
             
         st.rerun()
     else:
         st.error("E-mail ou senha incorretos. Tente novamente.")
+
 # Bloqueio visual: Se não estiver logado, renderiza o form centralizado e para o código de exibição
 if not st.session_state.logado:
     st.markdown("<h2 style='text-align: center;'>🔒 Acesso Restrito - Suprimentos</h2>", unsafe_allow_html=True)
