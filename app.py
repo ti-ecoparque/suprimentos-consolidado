@@ -159,18 +159,24 @@ def realizar_login(email_input, senha_input, lembrar_usuario):
         st.session_state.usuario_atual = email_input
         
         if lembrar_usuario:
-            # 🚀 CORREÇÃO DO TYPEERROR: Usando .date() puro para bater com a assinatura do método
-            prazo_expiracao = (datetime.now() + timedelta(days=30)).date()
-            cookie_manager.set(
-                cookie="ecoparque_session_id", 
-                value=email_input,
-                expires_at=prazo_expiracao
-            )
+            # Configura um prazo de expiração nativo válido por 30 dias
+            prazo_expiracao = datetime.now() + timedelta(days=30)
+            
+            # A biblioteca stx.CookieManager aceita a expiração diretamente como o terceiro argumento posicional,
+            # ou passando como uma string/datetime válida sem conflito de assinatura de método.
+            try:
+                cookie_manager.set(
+                    cookie="ecoparque_session_id", 
+                    value=email_input,
+                    expires_at=prazo_expiracao
+                )
+            except TypeError:
+                # Caso a versão instalada use a assinatura antiga posicional (cookie, value, expires_at)
+                cookie_manager.set("ecoparque_session_id", email_input, prazo_expiracao)
             
         st.rerun()
     else:
         st.error("E-mail ou senha incorretos. Tente novamente.")
-
 # Bloqueio visual: Se não estiver logado, renderiza o form centralizado e para o código de exibição
 if not st.session_state.logado:
     st.markdown("<h2 style='text-align: center;'>🔒 Acesso Restrito - Suprimentos</h2>", unsafe_allow_html=True)
