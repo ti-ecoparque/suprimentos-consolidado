@@ -6,7 +6,7 @@ import streamlit as st
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from supabase import create_client
-import extra_streamlit_components as stx # 👈 Nova biblioteca estável
+import extra_streamlit_components as stx 
 
 # 1. CONFIGURAÇÃO DA PÁGINA (OBRIGATORIAMENTE O PRIMEIRO COMANDO)
 st.set_page_config(
@@ -14,8 +14,9 @@ st.set_page_config(
     layout="wide"
 )
 
-# Inicializa o gerenciador de cookies persistente
+# Inicializa o gerenciador de cookies sem cache para evitar o CachedWidgetWarning
 cookie_manager = stx.CookieManager(key="gerenciador_cookies_global")
+
 
 # --- 2. FUNÇÃO DO CONTEÚDO DA HOME (PROTEGIDA) ---
 def renderizar_painel_principal():
@@ -135,14 +136,13 @@ pagina_lepdf = st.Page("pages/lepdf.py", title="Integrador LePDF", icon="📂")
 pg = st.navigation([pagina_painel, pagina_pedido, pagina_solicitacao, pagina_lepdf])
 
 
-# --- 4. SISTEMA DE LOGIN SEGURO (SECRETS + EXTRA COOKIES) ---
+# --- 4. SISTEMA DE LOGIN SEGURO (SECRETS + COOKIES PERSISTENTES) ---
 if "logado" not in st.session_state:
     st.session_state.logado = False
 
 # AUTO-LOGIN INTELIGENTE: Aguarda de forma segura a resposta assíncrona do navegador
 if not st.session_state.logado:
-    # Pequeno atraso preventivo (apenas 0.1s) para dar tempo de carregar o componente do navegador
-    time.sleep(0.1)
+    time.sleep(0.1)  # Pequeno atraso técnico preventivo para o JS carregar as chaves corporativas
     cookie_usuario = cookie_manager.get(cookie="ecoparque_session_id")
     
     if cookie_usuario:
@@ -158,12 +158,13 @@ def realizar_login(email_input, senha_input, lembrar_usuario):
         st.session_state.logado = True
         st.session_state.usuario_atual = email_input
         
-        # Se marcou para salvar, armazena no navegador com expiração para 30 dias
         if lembrar_usuario:
+            # 🚀 CORREÇÃO DO TYPEERROR: Usando .date() puro para bater com a assinatura do método
+            prazo_expiracao = (datetime.now() + timedelta(days=30)).date()
             cookie_manager.set(
                 cookie="ecoparque_session_id", 
                 value=email_input,
-                expires_at=datetime.now() + timedelta(days=30)
+                expires_at=prazo_expiracao
             )
             
         st.rerun()
@@ -191,7 +192,6 @@ with st.sidebar:
     st.divider()
     if st.button("🚪 Sair do Sistema", use_container_width=True, key="btn_logout_sidebar_definitivo"):
         st.session_state.logado = False
-        # Remove o cookie limpando o rastro local permanentemente
         cookie_manager.delete(cookie="ecoparque_session_id")
         st.rerun()
 
