@@ -3,7 +3,7 @@ import os
 import time
 import pandas as pd
 import streamlit as st
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from supabase import create_client
 import extra_streamlit_components as stx 
@@ -159,19 +159,18 @@ def realizar_login(email_input, senha_input, lembrar_usuario):
         st.session_state.usuario_atual = email_input
         
         if lembrar_usuario:
-            # 🚀 SOLUÇÃO: Converte a expiração para uma String em formato ISO/UTC limpo.
-            # O componente JavaScript do navegador lê strings de data perfeitamente em JSON.
-            prazo_string = (datetime.now() + timedelta(days=30)).isoformat()
+            # 🚀 O SEGREDO DO EXTRA-STREAMLIT-COMPONENTS:
+            # O componente exige um datetime com fuso horário explícito (tzinfo) para serializar corretamente em JSON
+            prazo_com_fuso = datetime.now(timezone.utc) + timedelta(days=30)
             
             try:
                 cookie_manager.set(
                     cookie="ecoparque_session_id", 
                     value=email_input,
-                    expires_at=prazo_string # 👈 Enviando como String, o erro de JSON some!
+                    expires_at=prazo_com_fuso # 👈 Enviando o objeto com fuso horário, o JS aceita e salva em disco
                 )
             except Exception:
-                # Fallback caso a assinatura exija argumentos posicionais brutos
-                cookie_manager.set("ecoparque_session_id", email_input, prazo_string)
+                cookie_manager.set("ecoparque_session_id", email_input, prazo_com_fuso)
             
         st.rerun()
     else:
