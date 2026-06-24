@@ -4,6 +4,7 @@ import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 from supabase import create_client
+from streamlit_cookies_controller import CookieController # 👈 Importação adicionada
 
 # 1. CONFIGURAÇÃO DA PÁGINA (OBRIGATORIAMENTE O PRIMEIRO COMANDO)
 st.set_page_config(
@@ -11,15 +12,34 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- SISTEMA DE LOGIN SEGURO (SECRETS) ---
+# Inicializa o controlador de cookies local do navegador
+controller = CookieController()
+
+# --- SISTEMA DE LOGIN SEGURO (SECRETS + COOKIES) ---
 if "logado" not in st.session_state:
     st.session_state.logado = False
 
-def realizar_login(email_input, senha_input):
+# 🟢 AUTO-LOGIN: Se não estiver logado na sessão atual, tenta ler o cookie salvo
+if not st.session_state.logado:
+    cookie_usuario = controller.get("ecoparque_user_session")
+    if cookie_usuario:
+        lista_usuarios = st.secrets["usuarios"]
+        # Se o e-mail gravado no cookie constar na lista de usuários ativos, loga direto
+        if cookie_usuario in lista_usuarios:
+            st.session_state.logado = True
+            st.session_state.usuario_atual = cookie_usuario
+            st.rerun()
+
+def realizar_login(email_input, senha_input, lembrar_usuario):
     lista_usuarios = st.secrets["usuarios"]
     if email_input in lista_usuarios and lista_usuarios[email_input] == senha_input:
         st.session_state.logado = True
         st.session_state.usuario_atual = email_input
+        
+        # 🟢 Se marcou para lembrar, grava o cookie no navegador
+        if lembrar_usuario:
+            controller.set("ecoparque_user_session", email_input)
+            
         st.rerun()
     else:
         st.error("E-mail ou senha incorretos. Tente novamente.")
@@ -30,9 +50,13 @@ if not st.session_state.logado:
         st.write("Insira suas credenciais corporativas para acessar o painel:")
         email_usuario = st.text_input("E-mail")
         senha_usuario = st.text_input("Senha", type="password")
+        
+        # 🟢 Nova Caixinha para o operador ativar o "Lembrar de Mim"
+        lembrar = st.checkbox("Manter-me conectado neste computador")
+        
         botao_entrar = st.form_submit_button("Entrar no Painel")
         if botao_entrar:
-            realizar_login(email_usuario, senha_usuario)
+            realizar_login(email_usuario, senha_usuario, lembrar)
     st.stop()
 
 
@@ -146,7 +170,6 @@ def renderizar_painel_principal():
 
 
 # --- DEFINIÇÃO DO MENU LATERAL E ROTEAMENTO ---
-# Em vez de passar "app.py" que gerava o loop infinito de leitura do mesmo arquivo, passamos a função limpa
 pagina_painel = st.Page(renderizar_painel_principal, title="Painel Principal", icon="📊", default=True)
 pagina_pedido = st.Page("pages/le_rel_pedido_compra.py", title="Pedidos de Compra", icon="📦")
 pagina_solicitacao = st.Page("pages/le_rel_sol_compra.py", title="Solicitações de Compra", icon="📥")
@@ -160,7 +183,9 @@ with st.sidebar:
     st.divider()
     if st.button("🚪 Sair do Sistema", use_container_width=True, key="btn_logout_sidebar_definitivo"):
         st.session_state.logado = False
+        # 🔴 Destrói o cookie ao deslogar para não re-entrar sem senha se for intencional
+        controller.remove("ecoparque_user_session")
         st.rerun()
 
-# Executa o roteador de forma linear e segura. O erro de duplicação sumiu 100%!
+# Executa o roteador de forma linear e segura.
 pg.run()
