@@ -2,6 +2,7 @@
 import os
 import pandas as pd
 import streamlit as st
+from datetime import datetime, timedelta # 👈 Adicionado timedelta para calcular a validade
 from dotenv import load_dotenv
 from supabase import create_client
 from streamlit_cookies_controller import CookieController
@@ -126,7 +127,6 @@ def renderizar_painel_principal():
 
 
 # --- 3. DEFINIÇÃO DO MENU LATERAL NO TOPO CRUCIAL ---
-# Força o menu a herdar os nomes bonitos antes de travar no st.stop() do login
 pagina_painel = st.Page(renderizar_painel_principal, title="Painel Principal", icon="📊", default=True)
 pagina_pedido = st.Page("pages/le_rel_pedido_compra.py", title="Pedidos de Compra", icon="📦")
 pagina_solicitacao = st.Page("pages/le_rel_sol_compra.py", title="Solicitações de Compra", icon="📥")
@@ -135,7 +135,7 @@ pagina_lepdf = st.Page("pages/lepdf.py", title="Integrador LePDF", icon="📂")
 pg = st.navigation([pagina_painel, pagina_pedido, pagina_solicitacao, pagina_lepdf])
 
 
-# --- 4. SISTEMA DE LOGIN SEGURO (SECRETS + COOKIES) ---
+# --- 4. SISTEMA DE LOGIN SEGURO (SECRETS + COOKIES PERSISTENTES) ---
 if "logado" not in st.session_state:
     st.session_state.logado = False
 
@@ -155,9 +155,15 @@ def realizar_login(email_input, senha_input, lembrar_usuario):
         st.session_state.logado = True
         st.session_state.usuario_atual = email_input
         
-        # Se marcou para salvar o login, grava o cookie
+        # 🚀 CORREÇÃO CIRÚRGICA: Configura uma data de expiração fixa de 30 dias no navegador
         if lembrar_usuario:
-            controller.set("ecoparque_user_session", email_input)
+            data_expiracao = datetime.now() + timedelta(days=30)
+            controller.set(
+                "ecoparque_user_session", 
+                email_input, 
+                expires=data_expiracao, # 👈 Passa a data calculada aqui
+                path="/"
+            )
             
         st.rerun()
     else:
@@ -171,11 +177,11 @@ if not st.session_state.logado:
         email_usuario = st.text_input("E-mail")
         senha_usuario = st.text_input("Senha", type="password")
         lembrar = st.checkbox("Manter-me conectado neste computador")
-        botao_entrar = st.form_submit_button("Entrar no Painel")
+        botao_entrar = st.form_submit_button("Entrar no Panel")
         if botao_entrar:
             realizar_login(email_usuario, senha_usuario, lembrar)
             
-    st.stop() # Congela o script aqui, mas a barra lateral declarada no bloco 3 permanece linda na esquerda
+    st.stop()
 
 
 # --- 5. BARRA LATERAL E MOTOR DE EXECUÇÃO (SÓ COMPILA PÓS-LOGIN) ---
@@ -184,7 +190,7 @@ with st.sidebar:
     st.divider()
     if st.button("🚪 Sair do Sistema", use_container_width=True, key="btn_logout_sidebar_definitivo"):
         st.session_state.logado = False
-        controller.remove("ecoparque_user_session") # Deleta a persistência local de login
+        controller.remove("ecoparque_user_session", path="/") # Deleta limpando o caminho raiz
         st.rerun()
 
 # Renderiza a página ativa com segurança
