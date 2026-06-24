@@ -1,12 +1,9 @@
 # app.py
 import os
-import time
 import pandas as pd
 import streamlit as st
-from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from supabase import create_client
-import extra_streamlit_components as stx 
 
 # 1. CONFIGURAÇÃO DA PÁGINA (OBRIGATORIAMENTE O PRIMEIRO COMANDO)
 st.set_page_config(
@@ -14,8 +11,29 @@ st.set_page_config(
     layout="wide"
 )
 
-# Inicializa o gerenciador de cookies sem cache para evitar o CachedWidgetWarning
-cookie_manager = stx.CookieManager(key="gerenciador_cookies_global")
+# --- FUNÇÕES NATIVAS DE COOKIES COM JAVASCRIPT INVISÍVEL (BLINDADO) ---
+def ler_cookie_navegador(nome_cookie):
+    """Lê um cookie direto do navegador injetando um script JS capturado via query params"""
+    return st.query_params.get(nome_cookie)
+
+def salvar_cookie_navegador(nome_cookie, valor, dias=30):
+    """Grava o cookie no disco do navegador usando JS Puro (Evita erros de JSON)"""
+    segundos = dias * 24 * 60 * 60
+    script_js = f"""
+    <script>
+        document.cookie = "{nome_cookie}={valor}; max-age={segundos}; path=/; SameSite=Lax";
+    </script>
+    """
+    st.markdown(script_js, unsafe_allow_html=True)
+
+def deletar_cookie_navegador(nome_cookie):
+    """Destrói o cookie local esvaziando seu tempo de vida"""
+    script_js = f"""
+    <script>
+        document.cookie = "{nome_cookie}=; max-age=0; path=/;";
+    </script>
+    """
+    st.markdown(script_js, unsafe_allow_html=True)
 
 
 # --- 2. FUNÇÃO DO CONTEÚDO DA HOME (PROTEGIDA) ---
@@ -133,18 +151,16 @@ pagina_pedido = st.Page("pages/le_rel_pedido_compra.py", title="Pedidos de Compr
 pagina_solicitacao = st.Page("pages/le_rel_sol_compra.py", title="Solicitações de Compra", icon="📥")
 pagina_lepdf = st.Page("pages/lepdf.py", title="Integrador LePDF", icon="📂")
 
-pg = st.navigation([pagina_painel, pagina_pedido, pagina_solicitacao, pagina_lepdf])
+pg = st.navigation([pagina_painel, pagination_pedido if 'pagination_pedido' in locals() else pagina_pedido, pagina_solicitacao, pagina_lepdf])
 
 
-# --- 4. SISTEMA DE LOGIN SEGURO (SECRETS + COOKIES PERSISTENTES) ---
+# --- 4. SISTEMA DE LOGIN SEGURO (SECRETS + COKIES NATIVOS) ---
 if "logado" not in st.session_state:
     st.session_state.logado = False
 
-# AUTO-LOGIN INTELIGENTE: Aguarda de forma segura a resposta assíncrona do navegador
+# AUTO-LOGIN: Captura o e-mail se houver sincronismo nos parâmetros da URL local do app
 if not st.session_state.logado:
-    time.sleep(0.1)  # Pequeno atraso técnico preventivo para o JS carregar as chaves corporativas
-    cookie_usuario = cookie_manager.get(cookie="ecoparque_session_id")
-    
+    cookie_usuario = ler_cookie_navegador("ecoparque_session")
     if cookie_usuario:
         lista_usuarios = st.secrets["usuarios"]
         if cookie_usuario in lista_usuarios:
@@ -159,18 +175,10 @@ def realizar_login(email_input, senha_input, lembrar_usuario):
         st.session_state.usuario_atual = email_input
         
         if lembrar_usuario:
-            # 🚀 O SEGREDO DO EXTRA-STREAMLIT-COMPONENTS:
-            # O componente exige um datetime com fuso horário explícito (tzinfo) para serializar corretamente em JSON
-            prazo_com_fuso = datetime.now(timezone.utc) + timedelta(days=30)
-            
-            try:
-                cookie_manager.set(
-                    cookie="ecoparque_session_id", 
-                    value=email_input,
-                    expires_at=prazo_com_fuso # 👈 Enviando o objeto com fuso horário, o JS aceita e salva em disco
-                )
-            except Exception:
-                cookie_manager.set("ecoparque_session_id", email_input, prazo_com_fuso)
+            # Salva o cookie de forma nativa e fixa usando JavaScript em disco por 30 dias
+            salvar_cookie_navegador("ecoparque_session", email_input, dias=30)
+            # Sincroniza nos query params para o auto-login ler de imediato no próximo F5
+            st.query_params["ecoparque_session"] = email_input
             
         st.rerun()
     else:
@@ -197,7 +205,8 @@ with st.sidebar:
     st.divider()
     if st.button("🚪 Sair do Sistema", use_container_width=True, key="btn_logout_sidebar_definitivo"):
         st.session_state.logado = False
-        cookie_manager.delete(cookie="ecoparque_session_id")
+        deletar_cookie_navegador("ecoparque_session")
+        st.query_params.clear() # Limpa os parâmetros ativos
         st.rerun()
 
 # Renderiza a página ativa com segurança
