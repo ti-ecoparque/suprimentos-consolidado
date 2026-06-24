@@ -4,7 +4,7 @@ import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 from supabase import create_client
-from streamlit_cookies_controller import CookieController # 👈 Importação adicionada
+from streamlit_cookies_controller import CookieController
 
 # 1. CONFIGURAÇÃO DA PÁGINA (OBRIGATORIAMENTE O PRIMEIRO COMANDO)
 st.set_page_config(
@@ -15,52 +15,8 @@ st.set_page_config(
 # Inicializa o controlador de cookies local do navegador
 controller = CookieController()
 
-# --- SISTEMA DE LOGIN SEGURO (SECRETS + COOKIES) ---
-if "logado" not in st.session_state:
-    st.session_state.logado = False
 
-# 🟢 AUTO-LOGIN: Se não estiver logado na sessão atual, tenta ler o cookie salvo
-if not st.session_state.logado:
-    cookie_usuario = controller.get("ecoparque_user_session")
-    if cookie_usuario:
-        lista_usuarios = st.secrets["usuarios"]
-        # Se o e-mail gravado no cookie constar na lista de usuários ativos, loga direto
-        if cookie_usuario in lista_usuarios:
-            st.session_state.logado = True
-            st.session_state.usuario_atual = cookie_usuario
-            st.rerun()
-
-def realizar_login(email_input, senha_input, lembrar_usuario):
-    lista_usuarios = st.secrets["usuarios"]
-    if email_input in lista_usuarios and lista_usuarios[email_input] == senha_input:
-        st.session_state.logado = True
-        st.session_state.usuario_atual = email_input
-        
-        # 🟢 Se marcou para lembrar, grava o cookie no navegador
-        if lembrar_usuario:
-            controller.set("ecoparque_user_session", email_input)
-            
-        st.rerun()
-    else:
-        st.error("E-mail ou senha incorretos. Tente novamente.")
-
-if not st.session_state.logado:
-    st.markdown("<h2 style='text-align: center;'>🔒 Acesso Restrito - Suprimentos</h2>", unsafe_allow_html=True)
-    with st.form("form_login", clear_on_submit=False):
-        st.write("Insira suas credenciais corporativas para acessar o painel:")
-        email_usuario = st.text_input("E-mail")
-        senha_usuario = st.text_input("Senha", type="password")
-        
-        # 🟢 Nova Caixinha para o operador ativar o "Lembrar de Mim"
-        lembrar = st.checkbox("Manter-me conectado neste computador")
-        
-        botao_entrar = st.form_submit_button("Entrar no Painel")
-        if botao_entrar:
-            realizar_login(email_usuario, senha_usuario, lembrar)
-    st.stop()
-
-
-# --- CORREÇÃO DEFINITIVA: FUNÇÃO DO CONTEÚDO DA HOME ---
+# --- 2. FUNÇÃO DO CONTEÚDO DA HOME (PROTEGIDA) ---
 def renderizar_painel_principal():
     """Toda a lógica e busca que antes ficava solta no app.py agora fica protegida aqui dentro"""
     from cenarios.cenario_a import renderizar_cenario_a
@@ -169,7 +125,8 @@ def renderizar_painel_principal():
             renderizar_cenario_c(periodo, status_selecionados, supabase, Skinner_status)
 
 
-# --- DEFINIÇÃO DO MENU LATERAL E ROTEAMENTO ---
+# --- 3. DEFINIÇÃO DO MENU LATERAL NO TOPO CRUCIAL ---
+# Força o menu a herdar os nomes bonitos antes de travar no st.stop() do login
 pagina_painel = st.Page(renderizar_painel_principal, title="Painel Principal", icon="📊", default=True)
 pagina_pedido = st.Page("pages/le_rel_pedido_compra.py", title="Pedidos de Compra", icon="📦")
 pagina_solicitacao = st.Page("pages/le_rel_sol_compra.py", title="Solicitações de Compra", icon="📥")
@@ -177,15 +134,58 @@ pagina_lepdf = st.Page("pages/lepdf.py", title="Integrador LePDF", icon="📂")
 
 pg = st.navigation([pagina_painel, pagina_pedido, pagina_solicitacao, pagina_lepdf])
 
-# Renderiza as informações e o botão de Logout na sidebar de forma global e única
+
+# --- 4. SISTEMA DE LOGIN SEGURO (SECRETS + COOKIES) ---
+if "logado" not in st.session_state:
+    st.session_state.logado = False
+
+# AUTO-LOGIN: Tenta restaurar a sessão persistida pelo cookie no navegador
+if not st.session_state.logado:
+    cookie_usuario = controller.get("ecoparque_user_session")
+    if cookie_usuario:
+        lista_usuarios = st.secrets["usuarios"]
+        if cookie_usuario in lista_usuarios:
+            st.session_state.logado = True
+            st.session_state.usuario_atual = cookie_usuario
+            st.rerun()
+
+def realizar_login(email_input, senha_input, lembrar_usuario):
+    lista_usuarios = st.secrets["usuarios"]
+    if email_input in lista_usuarios and lista_usuarios[email_input] == senha_input:
+        st.session_state.logado = True
+        st.session_state.usuario_atual = email_input
+        
+        # Se marcou para salvar o login, grava o cookie
+        if lembrar_usuario:
+            controller.set("ecoparque_user_session", email_input)
+            
+        st.rerun()
+    else:
+        st.error("E-mail ou senha incorretos. Tente novamente.")
+
+# Bloqueio visual: Se não estiver logado, renderiza o form centralizado e para o código de exibição
+if not st.session_state.logado:
+    st.markdown("<h2 style='text-align: center;'>🔒 Acesso Restrito - Suprimentos</h2>", unsafe_allow_html=True)
+    with st.form("form_login", clear_on_submit=False):
+        st.write("Insira suas credenciais corporativas para acessar o painel:")
+        email_usuario = st.text_input("E-mail")
+        senha_usuario = st.text_input("Senha", type="password")
+        lembrar = st.checkbox("Manter-me conectado neste computador")
+        botao_entrar = st.form_submit_button("Entrar no Painel")
+        if botao_entrar:
+            realizar_login(email_usuario, senha_usuario, lembrar)
+            
+    st.stop() # Congela o script aqui, mas a barra lateral declarada no bloco 3 permanece linda na esquerda
+
+
+# --- 5. BARRA LATERAL E MOTOR DE EXECUÇÃO (SÓ COMPILA PÓS-LOGIN) ---
 with st.sidebar:
     st.write(f"👤 Conectado como: **{st.session_state.usuario_atual}**")
     st.divider()
     if st.button("🚪 Sair do Sistema", use_container_width=True, key="btn_logout_sidebar_definitivo"):
         st.session_state.logado = False
-        # 🔴 Destrói o cookie ao deslogar para não re-entrar sem senha se for intencional
-        controller.remove("ecoparque_user_session")
+        controller.remove("ecoparque_user_session") # Deleta a persistência local de login
         st.rerun()
 
-# Executa o roteador de forma linear e segura.
+# Renderiza a página ativa com segurança
 pg.run()
