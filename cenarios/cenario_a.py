@@ -3,6 +3,21 @@
 import streamlit as st
 import pandas as pd
 
+# Se a sessão caiu (F5), tenta resgatar o usuário direto da URL antes de barrar o acesso
+if "logado" not in st.session_state or not st.session_state.logado:
+    usuario_url = st.query_params.get("u")
+    
+    if usuario_url:
+        # Se achou o parâmetro na URL, revalida e loga em segundo plano de forma invisível
+        st.session_state.logado = True
+        st.session_state.usuario_atual = usuario_url
+    else:
+        # Se realmente não tiver a chave de login na URL, bloqueia o acesso
+        st.warning("⚠️ Acesso restrito. Por favor, faça login na tela inicial antes de continuar.")
+        if st.button("Ir para a Tela de Login"):
+            st.switch_page("app.py")
+        st.stop()
+
 def renderizar_cenario_a(pedido, pedidos, rm_para_conferencia, supabase, Skinner_status):
     resposta_itens = (
         supabase
