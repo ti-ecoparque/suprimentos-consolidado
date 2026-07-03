@@ -17,6 +17,7 @@ def renderizar_painel_principal():
     from cenarios.cenario_a import renderizar_cenario_a
     from cenarios.cenario_b import renderizar_cenario_b
     from cenarios.cenario_c import renderizar_cenario_c
+    from cenarios.cenario_d import renderizar_cenario_d
 
     load_dotenv()
 
