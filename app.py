@@ -119,6 +119,8 @@ def renderizar_painel_principal():
             renderizar_cenario_b(rm_para_conferencia, pedidos, supabase, Skinner_status)
         elif periodo:
             renderizar_cenario_c(periodo, status_selecionados, supabase, Skinner_status)
+        else:
+            renderizar_cenario_d(rm_para_conferencia, pedidos, supabase, Skinner_status)    
 
 
 # --- 2. CONFIGURAÇÃO DE NAVEGAÇÃO E SUCESSO DO MENU ---
@@ -126,8 +128,9 @@ pagina_painel = st.Page(renderizar_painel_principal, title="Painel Principal", i
 pagina_pedido = st.Page("pages/le_rel_pedido_compra.py", title="Pedidos de Compra", icon="📦")
 pagina_solicitacao = st.Page("pages/le_rel_sol_compra.py", title="Solicitações de Compra", icon="📥")
 pagina_lepdf = st.Page("pages/lepdf.py", title="Integrador LePDF", icon="📂")
+pagina_approvo = st.Page("cenarios/cenario_d.py", title="Approvo Status", icon="✅")
 
-pg = st.navigation([pagina_painel, pagina_pedido, pagina_solicitacao, pagina_lepdf])
+pg = st.navigation([pagina_painel, pagina_pedido, pagina_solicitacao, pagina_lepdf, pagina_approvo])
 
 
 # --- 3. SISTEMA DE AUTO-LOGIN SEGURO NATIVO (À PROVA DE F5) ---
