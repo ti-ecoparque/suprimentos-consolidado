@@ -62,7 +62,7 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
                     res_pc = supabase.table("vw_approvo_pc").select("*").in_("pedido", lista_pedidos).execute()
                     df_pc_bruto = pd.DataFrame(res_pc.data)
 
-            # ==========================================================
+                        # ==========================================================
             # 🔄 5. LOGÍSTICA DE CRUZAMENTO DE DADOS (PANDAS MERGE)
             # ==========================================================
             # Converte as chaves de cruzamento para texto para evitar incompatibilidade
@@ -86,7 +86,7 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
                         "nome_aprovador": "nome_aprovador_pc"
                     }, inplace=True, errors="ignore")
                     
-                    # 💡 CORREÇÃO AQUI: Mudado de df_consolidated para df_consolidado (corrigindo o erro de digitação)
+                    # 💡 FIX: Usando df_consolidado de forma correta (sem o 'd' no final)
                     if "mat" in df_consolidado.columns and "mat" in df_pc_bruto.columns:
                         df_final = pd.merge(df_consolidado, df_pc_bruto, on=["pedido_str", "mat"], how="left")
                     else:
@@ -156,45 +156,41 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
             colunas_existentes = [col for col in colunas_multi_index.keys() if col in df_final.columns]
             df_exibicao = df_final[colunas_existentes].copy()
             df_exibicao.columns = pd.MultiIndex.from_tuples([colunas_multi_index[c] for c in colunas_existentes])
+
+            # ==========================================================
             # 🎨 7. MAPA DE ESTILIZAÇÃO CSS DE CORES (IDENTIDADE PASTEL)
             # ==========================================================
             def aplicar_cores_corpo(df):
                 """Aplica cores suaves nas células de dados divididas por grupos"""
                 estilos = pd.DataFrame('', index=df.index, columns=df.columns)
                 for col in df.columns:
-                    # Nível 0 do MultiIndex guarda o nome do 'Super Cabeçalho'
-                    grupo = col[0]
+                    grupo = col[0] # Captura o primeiro nível do MultiIndex (O Super Cabeçalho)
                     if grupo == "REQUISICAO DE MATERIAL MEGA":
-                        estilos[col] = 'background-color: #f2f7f2; color: #000000;' # Verde ultra claro
+                        estilos[col] = 'background-color: #f2f7f2; color: #000000;'
                     elif grupo == "APPROVAL (RM)":
-                        estilos[col] = 'background-color: #e2f0d9; color: #000000;' # Verde médio
+                        estilos[col] = 'background-color: #e2f0d9; color: #000000;'
                     elif grupo == "PEDIDO DE COMPRA MEGA":
-                        estilos[col] = 'background-color: #fbf2fa; color: #000000;' # Rosa ultra claro
+                        estilos[col] = 'background-color: #fbf2fa; color: #000000;'
                     elif grupo == "APPROVAL (PC)":
-                        estilos[col] = 'background-color: #f3daf1; color: #000000;' # Roxo médio
+                        estilos[col] = 'background-color: #f3daf1; color: #000000;'
                 return estilos
 
-            # Injeta CSS bruto para pintar as caixas fixas superiores do cabeçalho HTML do Streamlit
+            # Injeta CSS para pintar os blocos superiores fixos do cabeçalho HTML do Streamlit
             st.markdown("""
                 <style>
-                    /* Configuração geral dos títulos superiores */
-                    th.col_heading.level0 { 
-                        font-weight: bold !important; 
-                        color: #000000 !important; 
-                        text-align: center !important; 
-                    }
-                    /* Injeta a paleta cromática idêntica ao print nas tags superiores do cabeçalho */
-                    th.col_heading.level0.id0_6 { background-color: #e2f0d9 !important; }   /* Bloco RM Mega */
-                    th.col_heading.level0.id7_9 { background-color: #a9d08e !important; }   /* Bloco Approval RM */
-                    th.col_heading.level0.id10_13 { background-color: #f2dcfa !important; } /* Bloco PC Mega */
-                    th.col_heading.level0.id14_16 { background-color: #df9ff2 !important; } /* Bloco Approval PC */
+                    th.col_heading.level0 { font-weight: bold !important; color: #000000 !important; text-align: center !important; }
+                    th.col_heading.level0.id0_6 { background-color: #e2f0d9 !important; }   /* RM */
+                    th.col_heading.level0.id7_9 { background-color: #a9d08e !important; }   /* Approval RM */
+                    th.col_heading.level0.id10_13 { background-color: #f2dcfa !important; } /* PC */
+                    th.col_heading.level0.id14_16 { background-color: #df9ff2 !important; } /* Approval PC */
                 </style>
             """, unsafe_allow_html=True)
 
-            # Aplica o mapa de estilos nas células e renderiza a tabela na tela
+            # Aplica o mapa de estilos e renderiza na tela de ponta a ponta
             df_estilizado = df_exibicao.style.apply(aplicar_cores_corpo, axis=None)
             st.dataframe(df_estilizado, use_container_width=True, hide_index=True)
 
         except Exception as e:
             st.error(f"❌ Erro crítico ao consolidar as visões no Cenário D: {e}")
+
 
