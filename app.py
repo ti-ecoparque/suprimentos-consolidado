@@ -63,7 +63,7 @@ def renderizar_painel_principal():
         with col2:
             rm = st.text_input("Número da RM", key="rm")
         with col3:
-            periodo = st.date_input("RMs por Período (Opcional)", value=[], key="periodo", format="DD/MM/YYYY")
+            periodo = st.date_input("RMs por Período (Opcional)", value=[], format="DD/MM/YYYY")
         
         status_selecionados = st.multiselect(
             "Filtrar Status da RM (Apenas para busca por período)",

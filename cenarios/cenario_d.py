@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import os
 from supabase import create_client
+from datetime import datetime
 
 # 1. TRAVA DE SEGURANÇA E AUTO-LOGIN (À PROVA DE F5)
 if "logado" not in st.session_state or not st.session_state.logado:
@@ -25,26 +26,13 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
     if supabase is None:
         SUPABASE_URL = os.getenv("SUPABASE_URL") or st.secrets.get("SUPABASE_URL")
         SUPABASE_KEY = os.getenv("SUPABASE_KEY") or st.secrets.get("SUPABASE_KEY")
+        if not SUPABASE_URL or not SUPABASE_KEY:
+            st.error("❌ Credenciais do Supabase não configuradas no ambiente local.")
+            st.stop()
         supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
     # ==========================================================
-    # 🔍 3. COLETA DINÂMICA DE OPÇÕES DO BANCO (CARREGAMENTO DOS FILTROS)
-    # ==========================================================
-    with st.spinner("Carregando listas de filtros operacionais..."):
-        try:
-            # 🚨 OTIMIZAÇÃO: Buscamos apenas os primeiros 300 registros únicos para listar no filtro sem pesar
-            res_reqs = supabase.table("vw_approvo_rm").select("nome_solicitante").limit(300).execute()
-            opcoes_requisitante = ["Todos"] + sorted(list(set([r["nome_solicitante"] for r in res_reqs.data if r.get("nome_solicitante")])))
-            
-            res_comps = supabase.table("vw_approvo_pc").select("comprador").limit(300).execute()
-            opcoes_comprador = ["Todos"] + sorted(list(set([c["comprador"] for c in res_comps.data if c.get("comprador")])))
-        except Exception as e_filtros:
-            # Se mesmo assim o banco demorar a responder, assume a lista vazia segura para a tela não apagar
-            opcoes_requisitante = ["Todos"]
-            opcoes_comprador = ["Todos"]
-
-    # ==========================================================
-    # 🛠️ 4. INTERFACE GRÁFICA DOS FILTROS INDEPENDENTES
+    # 🛠️ 3. INTERFACE GRÁFICA DOS FILTROS INDEPENDENTES (BLINDADA)
     # ==========================================================
     st.markdown("#### 🔍 Painel de Filtros Globais")
     
@@ -54,9 +42,12 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
     with col_f1:
         buscar_rm = st.text_input("Filtrar por Número da RM:", value=rm_para_conferencia).strip()
     with col_f2:
-        filtro_req = st.selectbox("Filtrar por Requisitante:", opcoes_requisitante)
+        # 🚨 MUDADO PARA TEXT_INPUT: Evita travar a inicialização da tela buscando listas pesadas no banco
+        buscar_req = st.text_input("Filtrar por Nome do Requisitante:", "").strip()
     with col_f3:
-        filtro_comp = st.selectbox("Filtrar por Comprador:", opcoes_comprador)
+        # 🚨 MUDADO PARA TEXT_INPUT: Permite ao usuário digitar livremente o comprador sem travar a tela
+        buscar_comp = st.text_input("Filtrar por Nome do Comprador:", "").strip()
+        
     with col_f4:
         filtro_status_rm = st.selectbox("Status da RM:", ["Todos", "Aprovado", "Em Aprovação", "Reprovado"])
     with col_f5:
@@ -65,9 +56,10 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
         filtro_periodo = st.date_input("Intervalo (Data da Requisição):", value=[], format="DD/MM/YYYY")
 
     # ==========================================================
-    # 🚀 5. CONSTRUÇÃO DA QUERY INTELIGENTE E INDEPENDENTE
+    # 🚀 4. CONSTRUÇÃO DA QUERY INTELIGENTE E INDEPENDENTE
     # ==========================================================
-    tem_filtro_ativo = buscar_rm or filtro_req != "Todos" or filtro_comp != "Todos" or filtro_status_rm != "Todos" or filtro_status_pc != "Todos" or len(filtro_periodo) == 2
+    # Só executa a busca pesada se o usuário preencher ou acionar algum filtro ativo
+    tem_filtro_ativo = buscar_rm or buscar_req or buscar_comp or filtro_status_rm != "Todos" or filtro_status_pc != "Todos" or len(filtro_periodo) == 2
     
     if not tem_filtro_ativo:
         st.info("💡 Selecione qualquer filtro acima ou digite uma RM para carregar os dados consolidados.")
@@ -80,8 +72,8 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
             
             if buscar_rm:
                 query_rm = query_rm.eq("rm", str(buscar_rm))
-            if filtro_req != "Todos":
-                query_rm = query_rm.eq("nome_solicitante", filtro_req)
+            if buscar_req:
+                query_rm = query_rm.ilike("nome_solicitante", f"%{buscar_req}%")
             if filtro_status_rm != "Todos":
                 mapa_invertido = {"Aprovado": "A", "Em Aprovação": "E", "Reprovado": "R"}
                 query_rm = query_rm.eq("status_documento", mapa_invertido[filtro_status_rm])
@@ -94,13 +86,16 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
                 st.stop()
 
             # Extrai a lista de RMs localizadas para buscar os pedidos correspondentes
-            lista_rms_encontradas = list(set([int(r) for r in df_rm_bruto["rm"].unique() if r is not None]))
+            lista_rms_encontradas = list(set([int(r) for r in df_rm_bruto["rm"].unique() if r is not None and str(r).isdigit()]))
+
+            df_vinculo = pd.DataFrame()
+            df_pc_bruto = pd.DataFrame()
 
             # 📐 B. QUERY NA TABELA DE VÍNCULO PEDIDO_COMPRA
-            res_vinculo = supabase.table("pedido_compra").select("rm", "pedido").in_("rm", lista_rms_encontradas).execute()
-            df_vinculo = pd.DataFrame(res_vinculo.data)
+            if lista_rms_encontradas:
+                res_vinculo = supabase.table("pedido_compra").select("rm", "pedido").in_("rm", lista_rms_encontradas).execute()
+                df_vinculo = pd.DataFrame(res_vinculo.data)
 
-            df_pc_bruto = pd.DataFrame()
             if not df_vinculo.empty:
                 lista_pedidos = list(set([str(p.get("pedido")) for p in res_vinculo.data if p.get("pedido") is not None]))
                 
@@ -108,8 +103,8 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
                     # 📐 C. QUERY NA VIEW DE PEDIDOS (PC)
                     query_pc = supabase.table("vw_approvo_pc").select("*").in_("pedido", lista_pedidos)
                     
-                    if filtro_comp != "Todos":
-                        query_pc = query_pc.eq("comprador", filtro_comp)
+                    if buscar_comp:
+                        query_pc = query_pc.ilike("comprador", f"%{buscar_comp}%")
                     if filtro_status_pc != "Todos":
                         mapa_invertido = {"Aprovado": "A", "Em Aprovação": "E", "Reprovado": "R"}
                         query_pc = query_pc.eq("status_documento", mapa_invertido[filtro_status_pc])
@@ -122,7 +117,7 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
                         df_pc_bruto.drop(columns=["entregas_agendadas"], inplace=True)
 
             # ==========================================================
-            # 🔄 6. LOGÍSTICA DE UNIFICAÇÃO (MERGE) E ANTIDUPLICIDADE
+            # 🔄 5. LOGÍSTICA DE UNIFICAÇÃO (MERGE) E ANTIDUPLICIDADE
             # ==========================================================
             df_rm_bruto["rm_str"] = df_rm_bruto["rm"].astype(str).str.strip()
             df_rm_bruto["mat_str"] = df_rm_bruto["mat"].astype(str).str.strip()
@@ -153,11 +148,7 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
                         "quantidade": "quantidade_comprada"
                     }, inplace=True, errors="ignore")
                     
-                    # 💡 CORREÇÃO AQUI: Mudado de df_consolidated para df_consolidado (corrigindo a digitação)
-                    if "mat" in df_consolidado.columns and "mat" in df_pc_limpo.columns:
-                        df_final = pd.merge(df_consolidado, df_pc_limpo, on=["pedido_str", "mat_str"], how="left")
-                    else:
-                        df_final = pd.merge(df_consolidado, df_pc_limpo, on="pedido_str", how="left")
+                    df_final = pd.merge(df_consolidado, df_pc_limpo, on=["pedido_str", "mat_str"], how="left")
                 else:
                     df_final = df_consolidado.copy()
                     for col in ["comprador", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"]:
@@ -179,12 +170,12 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
                 data_inicio, data_fim = pd.to_datetime(filtro_periodo), pd.to_datetime(filtro_periodo)
                 df_final["data_emissao_dt"] = pd.to_datetime(df_final["data_emissao"], errors="coerce")
                 df_final = df_final[(df_final["data_emissao_dt"] >= data_inicio) & (df_final["data_emissao_dt"] <= data_fim)]
-                if df_final.empty:
-                    st.warning("⚠️ Nenhum registro corresponde ao intervalo de datas selecionado.")
-                    st.stop()
-            
+
+            if df_final.empty:
+                st.warning("⚠️ Nenhum registro corresponde ao intervalo de datas selecionado.")
+                st.stop()
                         # ==========================================================
-            # 📊 7. MAPEAMENTO, TRADUÇÃO E FORMATAÇÃO VISUAL
+            # 📊 6. MAPEAMENTO, TRADUÇÃO E FORMATAÇÃO VISUAL
             # ==========================================================
             # Dicionário de tradução das siglas de Status da RM e do PC
             mapa_status_extenso = {"A": "Aprovado", "E": "Em Aprovação", "R": "Reprovado", "---": "---"}
@@ -210,6 +201,7 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
                 if col in df_final.columns:
                     df_final[col] = pd.to_datetime(df_final[col], errors="coerce").dt.strftime("%d/%m/%Y %H:%M")
 
+            # Garante a limpeza de valores nulos redundantes do Pandas
             df_final.fillna("---", inplace=True)
             df_final.replace("nan", "---", inplace=True)
 
@@ -233,23 +225,24 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
                 "quantidade_comprada":("PEDIDO DE COMPRA MEGA", "Qt. Compr."),
                 
                 "status_pc":          ("APPROVAL (PC)", "Status da Aprovação"),
-                "data_ocorrencia_pc": ("APPROVAL (PC)", "Data da Aprovação"),
+                "data_ocorrencia_pc": ("APPROVAL (PC)", "Data da Approvação"),
                 "nome_aprovador_pc":  ("APPROVAL (PC)", "Aprovador")
             }
 
+            # Filtra e gera o cabeçalho multinível estruturado baseado no df_final
             colunas_existentes = [col for col in colunas_multi_index.keys() if col in df_final.columns]
             df_exibicao = df_final[colunas_existentes].copy()
             df_exibicao.columns = pd.MultiIndex.from_tuples([colunas_multi_index[c] for c in colunas_existentes])
 
             # ==========================================================
-            # 🎨 8. LAYOUT CROMÁTICO (IDENTIDADE PASTEL)
+            # 🎨 7. LAYOUT CROMÁTICO (IDENTIDADE PASTEL)
             # ==========================================================
             def aplicar_cores_corpo(df):
-                """Pinta as células com tons pastéis baseados no super cabeçalho pai"""
+                """Pinta as células do corpo com os tons suaves divididos por grupo pai"""
                 estilos = pd.DataFrame('', index=df.index, columns=df.columns)
                 for col in df.columns:
-                    grupo = col
-                    if grupo == "REQUISICAO DE MATERIAL MEGA":
+                    grupo = col[0] # Alvo: Lê estritamente a primeira string do nível superior do MultiIndex
+                    if grupo == "REQUISICAO DE MATERIAL MATERIAL MEGA" or grupo == "REQUISICAO DE MATERIAL MEGA":
                         estilos[col] = 'background-color: #f2f7f2; color: #000000;'
                     elif grupo == "APPROVAL (RM)":
                         estilos[col] = 'background-color: #e2f0d9; color: #000000;'
@@ -259,21 +252,20 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
                         estilos[col] = 'background-color: #f3daf1; color: #000000;'
                 return estilos
 
-            # Injeta o código CSS para colorir os títulos superiores do Streamlit
+            # Injeta CSS bruto ajustado para fixar e pintar as caixas HTML superiores do Streamlit de forma exata
             st.markdown("""
                 <style>
                     th.col_heading.level0 { font-weight: bold !important; color: #000000 !important; text-align: center !important; }
-                    th.col_heading.level0.id0_6 { background-color: #e2f0d9 !important; }
-                    th.col_heading.level0.id7_9 { background-color: #a9d08e !important; }
-                    th.col_heading.level0.id10_13 { background-color: #f2dcfa !important; }
-                    th.col_heading.level0.id14_16 { background-color: #df9ff2 !important; }
+                    th.col_heading.level0.id0_6 { background-color: #e2f0d9 !important; }   /* Bloco RM */
+                    th.col_heading.level0.id7_9 { background-color: #a9d08e !important; }   /* Bloco Approval RM */
+                    th.col_heading.level0.id10_13 { background-color: #f2dcfa !important; } /* Bloco PC */
+                    th.col_heading.level0.id14_16 { background-color: #df9ff2 !important; } /* Bloco Approval PC */
                 </style>
             """, unsafe_allow_html=True)
 
-            # Renderiza a tabela finalizada na interface do Streamlit
+            # Executa a estilização nas células de dados e renderiza a tabela finalizada
             df_estilizado = df_exibicao.style.apply(aplicar_cores_corpo, axis=None)
             st.dataframe(df_estilizado, use_container_width=True, hide_index=True)
 
         except Exception as e:
             st.error(f"❌ Erro crítico ao consolidar as visões no Cenário D: {e}")
-        
