@@ -86,8 +86,7 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
                         "nome_aprovador": "nome_aprovador_pc"
                     }, inplace=True, errors="ignore")
                     
-                    # Junta o resultado final com a view de Pedidos de Compra
-                    # Cruzamos por 'pedido_str' e por 'mat' (código do material) para alinhar os itens corretamente
+                    # 💡 CORREÇÃO AQUI: Mudado de df_consolidated para df_consolidado (corrigindo o erro de digitação)
                     if "mat" in df_consolidado.columns and "mat" in df_pc_bruto.columns:
                         df_final = pd.merge(df_consolidado, df_pc_bruto, on=["pedido_str", "mat"], how="left")
                     else:
@@ -157,9 +156,6 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
             colunas_existentes = [col for col in colunas_multi_index.keys() if col in df_final.columns]
             df_exibicao = df_final[colunas_existentes].copy()
             df_exibicao.columns = pd.MultiIndex.from_tuples([colunas_multi_index[c] for c in colunas_existentes])
-
-            # 7. MAPA DE ESTILIZAÇÃO CSS DE CORES DAS LINHAS (Tons Pastel Pastel)
-                        # ==========================================================
             # 🎨 7. MAPA DE ESTILIZAÇÃO CSS DE CORES (IDENTIDADE PASTEL)
             # ==========================================================
             def aplicar_cores_corpo(df):
