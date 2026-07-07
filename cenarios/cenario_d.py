@@ -55,6 +55,10 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
                 if lista_pedidos:
                     res_pc = supabase.table("vw_approvo_pc").select("*").in_("pedido", lista_pedidos).execute()
                     df_pc_bruto = pd.DataFrame(res_pc.data)
+                    
+                    if "entregas_agendadas" in df_pc_bruto.columns:
+                        df_pc_bruto.drop(columns=["entregas_agendadas"], inplace=True)
+                    
                     if not df_pc_bruto.empty:
                         # 🚨 LIMPA DUPLICADOS DA ORIGEM DO PC (Resolve o problema do print!)
                         df_pc_bruto = df_pc_bruto.drop_duplicates() 
@@ -111,6 +115,10 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
                 df_final["pedido_str"] = None
                 for col in ["comprador", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"]:
                     df_final[col] = None
+            if "mat" in df_final.columns:
+                df_final = df_final.drop_duplicates(subset=["rm", "mat"]).copy()
+            else:
+                df_final = df_final.drop_duplicates().copy()        
 
             # 🚨 5. SOLUÇÃO DEFINITIVA DO ERRO 'unhashable type: list':
             # Removemos qualquer coluna de lista/JSONB residual (como entregas_agendadas) antes do drop_duplicates
