@@ -91,6 +91,18 @@ if arquivos_enviados:
                     if cnpj: mapa_cnpjs[pedido_resultado] = cnpj
                     if rm_resultado: mapa_pedido_rm[pedido_resultado] = rm_resultado
 
+                # Captura o Comprador (Pega tudo após 'Comprador:' até o final da linha)
+                comprador = None
+                padrao_comprador = re.search(r"Comprador:\s*(.+)", texto_completo, re.IGNORECASE)
+                if padrao_comprador: 
+                    comprador = padrao_comprador.group(1).strip()
+
+                # Captura estrita da Dt. Entrega que fica no cabeçalho do Fornecedor
+                dt_entrega_cabecalho = None
+                padrao_dt_entrega = re.search(r"Dt\.\s*Entrega\s*:\s*(\d{2}/\d{2}/\d{4})", texto_completo, re.IGNORECASE)
+                if padrao_dt_entrega: 
+                    dt_entrega_cabecalho = converter_data(padrao_dt_entrega.group(1))
+                
                 emissao = None
                 padrao_emissao = re.search(r"emiss.*:\s*(\d{2}/\d{2}/\d{4})", texto_completo, re.IGNORECASE)
                 if padrao_emissao: emissao = converter_data(padrao_emissao.group(1))
@@ -136,6 +148,8 @@ if arquivos_enviados:
                                 "cnpj": str(cnpj) if cnpj else None,
                                 "emissao": emissao,
                                 "entrega": entrega,
+                                "entrega_cabecalho": dt_entrega_cabecalho,    
+                                "comprador": comprador,                       
                                 "observacao": observacao,
                                 "entregas_agendadas": entregas_agendadas
                             })
@@ -230,3 +244,4 @@ if st.session_state.get("mostrar_tabela_resumo"):
         st.session_state.total_linhas_importadas = 0
         st.session_state.id_upload += 1  # Reseta o campo file_uploader limpando a caixa cinza
         st.rerun()
+

@@ -51,7 +51,8 @@ if arquivo_postado is not None:
                 "Unidade": "unidade_medida",
                 "Usuário solicitante": "usuario_solicitante",
                 "Status da necessidade": "status_necessidade",
-                "Código da cotação": "cod_cotacao"
+                "Código da cotação": "cod_cotacao",
+                "Data de necessidade" : "data_necessidade"
             }
 
             # Valida se todas as colunas mapeadas existem no arquivo carregado
