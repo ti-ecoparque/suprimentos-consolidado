@@ -32,12 +32,14 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
     # ==========================================================
     with st.spinner("Carregando listas de filtros operacionais..."):
         try:
-            res_reqs = supabase.table("vw_approvo_rm").select("nome_solicitante").execute()
+            # 🚨 OTIMIZAÇÃO: Buscamos apenas os primeiros 300 registros únicos para listar no filtro sem pesar
+            res_reqs = supabase.table("vw_approvo_rm").select("nome_solicitante").limit(300).execute()
             opcoes_requisitante = ["Todos"] + sorted(list(set([r["nome_solicitante"] for r in res_reqs.data if r.get("nome_solicitante")])))
             
-            res_comps = supabase.table("vw_approvo_pc").select("comprador").execute()
+            res_comps = supabase.table("vw_approvo_pc").select("comprador").limit(300).execute()
             opcoes_comprador = ["Todos"] + sorted(list(set([c["comprador"] for c in res_comps.data if c.get("comprador")])))
-        except Exception:
+        except Exception as e_filtros:
+            # Se mesmo assim o banco demorar a responder, assume a lista vazia segura para a tela não apagar
             opcoes_requisitante = ["Todos"]
             opcoes_comprador = ["Todos"]
 
@@ -55,7 +57,6 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
         filtro_req = st.selectbox("Filtrar por Requisitante:", opcoes_requisitante)
     with col_f3:
         filtro_comp = st.selectbox("Filtrar por Comprador:", opcoes_comprador)
-        
     with col_f4:
         filtro_status_rm = st.selectbox("Status da RM:", ["Todos", "Aprovado", "Em Aprovação", "Reprovado"])
     with col_f5:
