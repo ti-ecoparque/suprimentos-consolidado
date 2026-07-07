@@ -63,43 +63,42 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
                     df_pc_bruto = pd.DataFrame(res_pc.data)
 
                         # ==========================================================
-            # 🔄 5. LOGÍSTICA DE CRUZAMENTO DE DADOS (PANDAS MERGE)
+                        # ==========================================================
+            # 🔄 5. LOGÍSTICA DE CRUZAMENTO DE DADOS (PANDAS MERGE) - CORRIGIDO
             # ==========================================================
-            # Converte as chaves de cruzamento para texto para evitar incompatibilidade
+            # Converte as chaves de cruzamento para texto para evitar incompatibilidade de tipos
             df_rm_bruto["rm_str"] = df_rm_bruto["rm"].astype(str)
             
             if not df_vinculo.empty:
                 df_vinculo["rm_str"] = df_vinculo["rm"].astype(str)
                 df_vinculo["pedido_str"] = df_vinculo["pedido"].astype(str)
                 
-                # Junta RM com o vínculo de pedidos (Garante que a coluna 'pedido' apareça)
+                # 1. Junta a RM com a tabela que diz qual pedido ela gerou
                 df_consolidado = pd.merge(df_rm_bruto, df_vinculo[["rm_str", "pedido_str"]], on="rm_str", how="left")
                 
                 if not df_pc_bruto.empty:
                     df_pc_bruto["pedido_str"] = df_pc_bruto["pedido"].astype(str)
                     
-                    # Renomeia colunas duplicadas da segunda view para não sobrescrever a primeira
+                    # Renomeia colunas duplicadas da segunda view para não chocar com a primeira
                     df_pc_bruto.rename(columns={
                         "status_documento": "status_pc",
                         "data_oficial_ocorrencia": "data_ocorrencia_pc",
                         "data_ocorrencia": "data_ocorrencia_pc",
-                        "nome_aprovador": "nome_aprovador_pc"
+                        "nome_aprovador": "nome_aprovador_pc",
+                        "quantidade": "quantidade_comprada" # Evita chocar com qtd_solicitada
                     }, inplace=True, errors="ignore")
                     
-                    # 💡 FIX: Usando df_consolidado de forma correta (sem o 'd' no final)
-                    if "mat" in df_consolidado.columns and "mat" in df_pc_bruto.columns:
-                        df_final = pd.merge(df_consolidado, df_pc_bruto, on=["pedido_str", "mat"], how="left")
-                    else:
-                        df_final = pd.merge(df_consolidado, df_pc_bruto, on="pedido_str", how="left")
+                    # 🚨 CORREÇÃO DO CRUZAMENTO: Cruzamos APENAS por pedido_str para garantir 
+                    # que os dados do comprador e aprovação do PC se acoplem sem multiplicar linhas
+                    df_final = pd.merge(df_consolidado, df_pc_bruto, on="pedido_str", how="left")
                 else:
                     df_final = df_consolidado.copy()
-                    # Se não tem dados de PC na view, cria as colunas vazias para manter o cabeçalho funcional
-                    for col in ["comprador", "entrega", "quantidade", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"]:
+                    for col in ["comprador", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"]:
                         df_final[col] = None
             else:
                 df_final = df_rm_bruto.copy()
                 df_final["pedido_str"] = None
-                for col in ["comprador", "entrega", "quantidade", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"]:
+                for col in ["comprador", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"]:
                     df_final[col] = None
 
             # ==========================================================
@@ -145,7 +144,7 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
                 "comprador":          ("PEDIDO DE COMPRA MEGA", "Comprador"),
                 "pedido_str":         ("PEDIDO DE COMPRA MEGA", "Nr. PC"),
                 "entrega":            ("PEDIDO DE COMPRA MEGA", "Data de Entrega"),
-                "quantidade":         ("PEDIDO DE COMPRA MEGA", "Qt. Compr."),
+                "quantidade_comprada": ("PEDIDO DE COMPRA MEGA", "Qt. Compr."),
                 
                 "status_pc":          ("APPROVAL (PC)", "Status da Aprovação"),
                 "data_ocorrencia_pc": ("APPROVAL (PC)", "Data da Aprovação"),
