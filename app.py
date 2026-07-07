@@ -5,6 +5,8 @@ import streamlit as st
 from dotenv import load_dotenv
 from supabase import create_client
 
+load_dotenv()
+
 # 1. CONFIGURAÇÃO DA PÁGINA (OBRIGATORIAMENTE O PRIMEIRO COMANDO)
 st.set_page_config(
     page_title="Consolidado Pedidos/RM",
