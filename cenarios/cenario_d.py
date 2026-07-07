@@ -64,34 +64,63 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
                 if "data_ocorrencia" in df_bruto.columns:
                     df_bruto["data_ocorrencia"] = pd.to_datetime(df_bruto["data_ocorrencia"], errors="coerce").dt.strftime("%d/%m/%Y %H:%M")
 
-                # 🚨 FILTRO E RENOMEAÇÃO DE COLUNAS PARA O LAYOUT EXECUTIVO SOLICITADO
-                # Dicionário mapeia: 'nome_na_view': 'Nome que você quer na tela'
-                colunas_mapeadas = {
-                    "nome_solicitante": "Requisitante",
-                    "rm":               "Nr RM",
-                    "desc_item":        "Descrição",
-                    "data_emissao":     "Dt Requisição",
-                    "data_necessidade": "Dt Necessidade",
-                    "status_documento": "Status RM",
-                    "data_ocorrencia":  "Data Aprovação",
-                    "nome_aprovador":   "Aprovador"
+                colunas_multi_index = {
+                    "nome_solicitante": ("REQUISICAO DE MATERIAL MEGA", "Requisitante"),
+                    "rm":               ("REQUISICAO DE MATERIAL MEGA", "Nr. RM"),
+                    "mat":              ("REQUISICAO DE MATERIAL MEGA", "Nr. Material"),
+                    "desc_item":        ("REQUISICAO DE MATERIAL MEGA", "Descrição"),
+                    "qtd_solicitada":   ("REQUISICAO DE MATERIAL MEGA", "Qt. Sol."),
+                    "data_emissao":     ("REQUISICAO DE MATERIAL MEGA", "Data da Requisição"),
+                    "data_necessidade": ("REQUISICAO DE MATERIAL MEGA", "Data da Nec."),
+                    
+                    "status_documento": ("APPROVAL (RM)", "Status da Aprovação"),
+                    "data_ocorrencia":  ("APPROVAL (RM)", "Data da Aprovação"),
+                    "nome_aprovador":   ("APPROVAL (RM)", "Aprovador"),
                 }
                 
-                # Garante que só tentará exibir colunas que realmente existem no DataFrame
-                colunas_existentes = [col for col in colunas_mapeadas.keys() if col in df_bruto.columns]
-                
-                # Filtra apenas as colunas desejadas na ordem estipulada
+                # Garante que filtra apenas o que existe no banco
+                colunas_existentes = [col for col in colunas_multi_index.keys() if col in df_bruto.columns]
                 df_exibicao = df_bruto[colunas_existentes].copy()
                 
-                # Aplica os novos títulos amigáveis
-                df_exibicao.rename(columns=colunas_mapeadas, inplace=True)
+                # Aplica o MultiIndex criando os blocos agrupados no topo
+                df_exibicao.columns = pd.MultiIndex.from_tuples([colunas_multi_index[c] for c in colunas_existentes])
                 
-                # Organiza a exibição visual na tela do Streamlit
-                st.write(f"📋 Exibindo **{len(df_exibicao)}** registro(s) da requisição:")
-                st.dataframe(df_exibicao, use_container_width=True, hide_index=True)
+                # 2. FUNÇÃO AUXILIAR CSS PARA PINTAR O CORPO DAS COLUNAS (OPCIONAL)
+                # Caso queira pintar o fundo das linhas com tons bem claros seguindo o print
+                def aplicar_cores_colunas(df):
+                    estilos = pd.DataFrame('', index=df.index, columns=df.columns)
+                    
+                    for col in df.columns:
+                        # Se a coluna pertencer ao grupo da Requisição (Verde bem claro)
+                        if col[0] == "REQUISICAO DE MATERIAL MEGA":
+                            estilos[col] = 'background-color: #e2f0d9; color: #000000;'
+                        # Se a coluna pertencer ao Approval da RM (Verde Médio)
+                        elif col[0] == "APPROVAL (RM)":
+                            estilos[col] = 'background-color: #c6e0b4; color: #000000;'
+                            
+                    return estilos
+
+                # 3. RENDERIZAÇÃO DA TABELA ESTILIZADA COM CSS INJETADO NO CABEÇALHO
+                # Injeta CSS bruto para forçar o Streamlit a pintar as caixas superiores do cabeçalho
+                st.markdown("""
+                    <style>
+                        /* Alvo: Primeira linha do super cabeçalho */
+                        th.col_heading.level0 {
+                            font-weight: bold !important;
+                            color: #000000 !important;
+                            text-align: center !important;
+                        }
+                        /* Bloco 1: Requisição Mega */
+                        th.col_heading.level0.id0_9 { background-color: #e2f0d9 !important; }
+                        /* Bloco 2: Approval RM */
+                        th.col_heading.level0.id10_12 { background-color: #a9d08e !important; }
+                    </style>
+                """, unsafe_allow_html=True)
+
+                # Aplica a estilização nas células de dados e renderiza
+                df_estilizado = df_exibicao.style.apply(aplicar_cores_colunas, axis=None)
                 
-            else:
-                st.info("Nenhum dado localizado para os critérios selecionados.")
+                st.dataframe(df_estilizado, use_container_width=True, hide_index=True)
                 
         except Exception as e:
             st.error(f"❌ Erro ao processar a tabela do Cenário D: {e}")
