@@ -193,4 +193,6 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
         except Exception as e:
             st.error(f"❌ Erro crítico ao consolidar as visões no Cenário D: {e}")
 
-
+if __name__ == "__main__":
+    # Garante que se o Streamlit chamar o arquivo direto, ele não quebra por falta de parâmetros
+    renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Skinner_status=None)
