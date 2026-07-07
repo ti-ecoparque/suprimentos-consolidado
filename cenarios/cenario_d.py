@@ -62,41 +62,50 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
                     res_pc = supabase.table("vw_approvo_pc").select("*").in_("pedido", lista_pedidos).execute()
                     df_pc_bruto = pd.DataFrame(res_pc.data)
 
-                        # ==========================================================
-            # 🔄 5. LOGÍSTICA DE CRUZAMENTO DE DADOS (PANDAS MERGE)
+             # ==========================================================
+            # 🔄 5. LOGÍSTICA DE CRUZAMENTO DE DADOS (PANDAS MERGE) - BLINDADO
             # ==========================================================
-            # 🚨 PASSO CRÍTICO: Remove linhas duplicadas geradas pelo histórico de ocorrências da primeira view
-            # Isso reduz as linhas repetidas do 'MATERIAL D' de volta ao registro único da RM
-            df_rm_limpo = df_rm_bruto.drop_duplicates(subset=["rm", "mat", "seq_item"]).copy()
+            # 🚨 1. FORÇA A LIMPEZA E PADRONIZAÇÃO DE TEXTOS/NÚMEROS DA VIEW DA RM
+            df_rm_bruto["rm_str"] = df_rm_bruto["rm"].astype(str).str.strip()
+            df_rm_bruto["mat_str"] = df_rm_bruto["mat"].astype(str).str.strip()
             
-            df_rm_limpo["rm_str"] = df_rm_limpo["rm"].astype(str)
+            # 🚨 2. RESOLVE A DUPLICIDADE: Mantém apenas as colunas fundamentais que você quer ver na tela
+            # Isso joga fora qualquer ID ou Timestamp oculto que estava multiplicando as linhas
+            colunas_vitais_rm = ["nome_solicitante", "rm", "mat", "desc_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "rm_str", "mat_str"]
+            colunas_existentes_rm = [c for c in colunas_vitais_rm if c in df_rm_bruto.columns]
+            
+            df_rm_limpo = df_rm_bruto[colunas_existentes_rm].drop_duplicates().copy()
             
             if not df_vinculo.empty:
-                df_vinculo["rm_str"] = df_vinculo["rm"].astype(str)
-                df_vinculo["pedido_str"] = df_vinculo["pedido"].astype(str)
+                df_vinculo["rm_str"] = df_vinculo["rm"].astype(str).str.strip()
+                df_vinculo["pedido_str"] = df_vinculo["pedido"].astype(str).str.strip()
                 
-                # Junta o DataFrame limpo da RM com a tabela que diz qual pedido ela gerou
+                # Junta RM com a tabela que diz qual pedido ela gerou
                 df_consolidado = pd.merge(df_rm_limpo, df_vinculo[["rm_str", "pedido_str"]], on="rm_str", how="left")
                 
                 if not df_pc_bruto.empty:
-                    df_pc_bruto["pedido_str"] = df_pc_bruto["pedido"].astype(str)
+                    # 🚨 3. FORÇA A PADRONIZAÇÃO DE TIPOS NA SEGUNDA VIEW (PC)
+                    df_pc_bruto["pedido_str"] = df_pc_bruto["pedido"].astype(str).str.strip()
+                    df_pc_bruto["mat_str"] = df_pc_bruto["mat"].astype(str).str.strip()
                     
-                    # 🚨 Remove duplicados também da view do PC caso ela tenha várias ocorrências históricas
-                    df_pc_limpo = df_pc_bruto.drop_duplicates(subset=["pedido", "mat", "item_pedido"]).copy()
+                    # Limpa o histórico de ocorrências do PC mantendo apenas os dados de exibição
+                    colunas_vitais_pc = ["pedido_str", "mat_str", "comprador", "entrega", "quantidade", "status_documento", "data_ocorrencia", "nome_aprovador"]
+                    colunas_existentes_pc = [c for c in colunas_vitais_pc if c in df_pc_bruto.columns]
                     
-                    # Renomeia colunas duplicadas da segunda view para não chocar com a primeira
+                    df_pc_limpo = df_pc_bruto[colunas_existentes_pc].drop_duplicates().copy()
+                    
+                    # Renomeia colunas para não chocar com os nomes da primeira view
                     df_pc_limpo.rename(columns={
                         "status_documento": "status_pc",
+                        "data_oficial_ocorrencia": "data_ocorrencia_pc",
                         "data_ocorrencia": "data_ocorrencia_pc",
                         "nome_aprovador": "nome_aprovador_pc",
                         "quantidade": "quantidade_comprada"
                     }, inplace=True, errors="ignore")
                     
-                    # Cruza os dados ligando pelo número do pedido e pelo código do material corporativo
-                    if "mat" in df_consolidado.columns and "mat" in df_pc_limpo.columns:
-                        df_final = pd.merge(df_consolidado, df_pc_limpo, on=["pedido_str", "mat"], how="left")
-                    else:
-                        df_final = pd.merge(df_consolidado, df_pc_limpo, on="pedido_str", how="left")
+                    # 🚨 4. EXECUTA O CRUZAMENTO PERFEITO POR NÚMERO DO PEDIDO E CÓDIGO DO MATERIAL
+                    # Como ambos agora são strings limpas (mat_str), o Pandas vai conseguir casar os dados
+                    df_final = pd.merge(df_consolidado, df_pc_limpo, on=["pedido_str", "mat_str"], how="left")
                 else:
                     df_final = df_consolidado.copy()
                     for col in ["comprador", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"]:
@@ -106,7 +115,6 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
                 df_final["pedido_str"] = None
                 for col in ["comprador", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"]:
                     df_final[col] = None
-
             # ==========================================================
             # 📊 6. MAPEAMENTO, TRADUÇÃO E FORMATAÇÃO VISUAL
             # ==========================================================
