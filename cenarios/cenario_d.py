@@ -30,7 +30,6 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
     # ==========================================================
     # 🔍 3. COLETA DINÂMICA DE OPÇÕES DO BANCO (CARREGAMENTO DOS FILTROS)
     # ==========================================================
-    # Para o app não ficar pesado, buscamos apenas os nomes únicos cadastrados nas views
     with st.spinner("Carregando listas de filtros operacionais..."):
         try:
             res_reqs = supabase.table("vw_approvo_rm").select("nome_solicitante").execute()
@@ -51,7 +50,6 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
     col_f4, col_f5, col_f6 = st.columns(3)
     
     with col_f1:
-        # Mantém a busca por RM opcional e livre
         buscar_rm = st.text_input("Filtrar por Número da RM:", value=rm_para_conferencia).strip()
     with col_f2:
         filtro_req = st.selectbox("Filtrar por Requisitante:", opcoes_requisitante)
@@ -68,7 +66,6 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
     # ==========================================================
     # 🚀 5. CONSTRUÇÃO DA QUERY INTELIGENTE E INDEPENDENTE
     # ==========================================================
-    # Só executa a busca pesada se o usuário usar pelo menos um filtro
     tem_filtro_ativo = buscar_rm or filtro_req != "Todos" or filtro_comp != "Todos" or filtro_status_rm != "Todos" or filtro_status_pc != "Todos" or len(filtro_periodo) == 2
     
     if not tem_filtro_ativo:
@@ -88,7 +85,7 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
                 mapa_invertido = {"Aprovado": "A", "Em Aprovação": "E", "Reprovado": "R"}
                 query_rm = query_rm.eq("status_documento", mapa_invertido[filtro_status_rm])
                 
-            res_rm = query_rm.limit(500).execute() # Limit impede travar a tela se vier dado demais
+            res_rm = query_rm.limit(500).execute()
             df_rm_bruto = pd.DataFrame(res_rm.data)
 
             if df_rm_bruto.empty:
@@ -119,7 +116,7 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
                     res_pc = query_pc.execute()
                     df_pc_bruto = pd.DataFrame(res_pc.data)
                     
-                    # Remove a coluna complexa de lista na raiz para matar o erro de 'unhashable type'
+                    # Remove a coluna de lista na raiz para matar o erro de 'unhashable type'
                     if "entregas_agendadas" in df_pc_bruto.columns:
                         df_pc_bruto.drop(columns=["entregas_agendadas"], inplace=True)
 
@@ -155,7 +152,11 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
                         "quantidade": "quantidade_comprada"
                     }, inplace=True, errors="ignore")
                     
-                    df_final = pd.merge(df_consolidado, df_pc_limpo, on=["pedido_str", "mat_str"], how="left")
+                    # 💡 CORREÇÃO AQUI: Mudado de df_consolidated para df_consolidado (corrigindo a digitação)
+                    if "mat" in df_consolidado.columns and "mat" in df_pc_limpo.columns:
+                        df_final = pd.merge(df_consolidado, df_pc_limpo, on=["pedido_str", "mat_str"], how="left")
+                    else:
+                        df_final = pd.merge(df_consolidado, df_pc_limpo, on="pedido_str", how="left")
                 else:
                     df_final = df_consolidado.copy()
                     for col in ["comprador", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"]:
@@ -174,13 +175,12 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
 
             # Filtro secundário opcional de Intervalo de Datas via Pandas
             if len(filtro_periodo) == 2:
-                data_inicio, data_fim = pd.to_datetime(filtro_periodo[0]), pd.to_datetime(filtro_periodo[1])
+                data_inicio, data_fim = pd.to_datetime(filtro_periodo), pd.to_datetime(filtro_periodo)
                 df_final["data_emissao_dt"] = pd.to_datetime(df_final["data_emissao"], errors="coerce")
                 df_final = df_final[(df_final["data_emissao_dt"] >= data_inicio) & (df_final["data_emissao_dt"] <= data_fim)]
-            if df_final.empty:
-                st.warning("⚠️ Nenhum registro corresponde ao intervalo de datas selecionado.")
-                st.stop()
-
+                if df_final.empty:
+                    st.warning("⚠️ Nenhum registro corresponde ao intervalo de datas selecionado.")
+                    st.stop()
             
                         # ==========================================================
             # 📊 7. MAPEAMENTO, TRADUÇÃO E FORMATAÇÃO VISUAL
@@ -209,7 +209,6 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
                 if col in df_final.columns:
                     df_final[col] = pd.to_datetime(df_final[col], errors="coerce").dt.strftime("%d/%m/%Y %H:%M")
 
-            # Garante a limpeza de valores nulos redundantes do Pandas
             df_final.fillna("---", inplace=True)
             df_final.replace("nan", "---", inplace=True)
 
@@ -237,7 +236,6 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
                 "nome_aprovador_pc":  ("APPROVAL (PC)", "Aprovador")
             }
 
-            # Filtra e gera o cabeçalho multinível estruturado
             colunas_existentes = [col for col in colunas_multi_index.keys() if col in df_final.columns]
             df_exibicao = df_final[colunas_existentes].copy()
             df_exibicao.columns = pd.MultiIndex.from_tuples([colunas_multi_index[c] for c in colunas_existentes])
@@ -246,10 +244,10 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
             # 🎨 8. LAYOUT CROMÁTICO (IDENTIDADE PASTEL)
             # ==========================================================
             def aplicar_cores_corpo(df):
-                """Pinta as células do corpo com os tons suaves divididos por grupo pai"""
+                """Pinta as células com tons pastéis baseados no super cabeçalho pai"""
                 estilos = pd.DataFrame('', index=df.index, columns=df.columns)
                 for col in df.columns:
-                    grupo = col[0] # Lê a string do super cabeçalho pai
+                    grupo = col
                     if grupo == "REQUISICAO DE MATERIAL MEGA":
                         estilos[col] = 'background-color: #f2f7f2; color: #000000;'
                     elif grupo == "APPROVAL (RM)":
@@ -260,20 +258,21 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
                         estilos[col] = 'background-color: #f3daf1; color: #000000;'
                 return estilos
 
-            # Injeta CSS bruto para fixar e pintar as caixas HTML superiores do Streamlit
+            # Injeta o código CSS para colorir os títulos superiores do Streamlit
             st.markdown("""
                 <style>
                     th.col_heading.level0 { font-weight: bold !important; color: #000000 !important; text-align: center !important; }
-                    th.col_heading.level0.id0_6 { background-color: #e2f0d9 !important; }   /* Bloco RM */
-                    th.col_heading.level0.id7_9 { background-color: #a9d08e !important; }   /* Bloco Approval RM */
-                    th.col_heading.level0.id10_13 { background-color: #f2dcfa !important; } /* Bloco PC */
-                    th.col_heading.level0.id14_16 { background-color: #df9ff2 !important; } /* Bloco Approval PC */
+                    th.col_heading.level0.id0_6 { background-color: #e2f0d9 !important; }
+                    th.col_heading.level0.id7_9 { background-color: #a9d08e !important; }
+                    th.col_heading.level0.id10_13 { background-color: #f2dcfa !important; }
+                    th.col_heading.level0.id14_16 { background-color: #df9ff2 !important; }
                 </style>
             """, unsafe_allow_html=True)
 
-            # Executa a estilização nas células de dados e renderiza a tabela finalizada
+            # Renderiza a tabela finalizada na interface do Streamlit
             df_estilizado = df_exibicao.style.apply(aplicar_cores_corpo, axis=None)
             st.dataframe(df_estilizado, use_container_width=True, hide_index=True)
 
         except Exception as e:
             st.error(f"❌ Erro crítico ao consolidar as visões no Cenário D: {e}")
+        
