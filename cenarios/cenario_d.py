@@ -62,6 +62,7 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
                     if not df_pc_bruto.empty:
                         # 🚨 LIMPA DUPLICADOS DA ORIGEM DO PC (Resolve o problema do print!)
                         df_pc_bruto = df_pc_bruto.drop_duplicates() 
+                            
 
                         # ==========================================================
             # 🔄 5. LOGÍSTICA DE CRUZAMENTO DE DADOS (PANDAS MERGE) - BLINDADO
@@ -132,40 +133,102 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
                 df_final = df_final.drop_duplicates(subset=["rm", "mat"]).copy()
             else:
                 df_final = df_final.drop_duplicates().copy()
+                
+                
+              # ==========================================================
+            # 🛠️ 5.5 PAINEL DE FILTROS COMBINADOS (APLICADOS NO DF_FINAL)
+            # ==========================================================
+            st.markdown("#### 🔍 Refinar Resultados de Busca")
+            
+            # Divide os filtros em duas linhas de colunas para organizar o layout
+            f_col1, f_col2, f_col3 = st.columns(3)
+            f_col4, f_col5 = st.columns(2)
+            
+            # Coleta as opções únicas direto do DataFrame para os Selectboxes (evita travar fixo)
+            opcoes_requisitante = ["Todos"] + sorted(list(df_final["nome_solicitante"].unique())) if "nome_solicitante" in df_final.columns else ["Todos"]
+            opcoes_comprador = ["Todos"] + sorted(list(df_final["comprador"].unique())) if "comprador" in df_final.columns else ["Todos"]
+            
+            # Tradução temporária para bater com o banco antes do mapeamento final
+            mapa_siglas = {"A": "Aprovado", "E": "Em Aprovação", "R": "Reprovado", "---": "---"}
+            
+            with f_col1:
+                filtro_req = st.selectbox("Filtrar por Requisitante:", opcoes_requisitante)
+            with f_col2:
+                filtro_comp = st.selectbox("Filtrar por Comprador:", opcoes_comprador)
+            with f_col3:
+                # Intervalo de Datas (Retorna uma lista com 2 elementos se o usuário escolher o fim)
+                filtro_periodo = st.date_input("Intervalo (Data da Requisição):", value=[], format="DD/MM/YYYY")
+                
+            with f_col4:
+                filtro_status_rm = st.selectbox("Status da RM:", ["Todos", "Aprovado", "Em Aprovação", "Reprovado"])
+            with f_col5:
+                filtro_status_pc = st.selectbox("Status do PC:", ["Todos", "Aprovado", "Em Aprovação", "Reprovado"])
+
+            # --- APLICAÇÃO DOS FILTROS NO DATAFRAME ANTES DA EXIBIÇÃO ---
+            df_filtrado = df_final.copy()
+            
+            if filtro_req != "Todos":
+                df_filtrado = df_filtrado[df_filtrado["nome_solicitante"] == filtro_req]
+                
+            if filtro_comp != "Todos":
+                df_filtrado = df_filtrado[df_filtrado["comprador"] == filtro_comp]
+                
+            if filtro_status_rm != "Todos":
+                # Inverte a tradução para buscar a sigla original ("A", "E", "R") na coluna bruta do banco
+                sigla_rm = [k for k, v in mapa_siglas.items() if v == filtro_status_rm][0]
+                df_filtrado = df_filtrado[df_filtrado["status_documento"].astype(str).str.strip() == sigla_rm]
+                
+            if filtro_status_pc != "Todos":
+                sigla_pc = [k for k, v in mapa_siglas.items() if v == filtro_status_pc][0]
+                df_filtrado = df_filtrado[df_filtrado["status_pc"].astype(str).str.strip() == sigla_pc]
+                
+            if len(filtro_periodo) == 2:
+                # Converte a coluna de data para o tipo Datetime do Pandas para fazer o filtro de data_inicio e data_fim
+                data_inicio, data_fim = pd.to_datetime(filtro_periodo[0]), pd.to_datetime(filtro_periodo[1])
+                df_filtrado["data_emissao_dt"] = pd.to_datetime(df_filtrado["data_emissao"], errors="coerce")
+                df_filtrado = df_filtrado[(df_filtrado["data_emissao_dt"] >= data_inicio) & (df_filtrado["data_emissao_dt"] <= data_fim)]
+
+            # Se o filtro esvaziar a tabela, avisa o usuário de forma amigável
+            if df_filtrado.empty:
+                st.warning("⚠️ Nenhum registro corresponde aos filtros selecionados. Tente ajustar os critérios.")
+                st.stop()   
 
                     
-            # ==========================================================
+                        # ==========================================================
             # 📊 6. MAPEAMENTO, TRADUÇÃO E FORMATAÇÃO VISUAL
             # ==========================================================
-            # Tradução das siglas de Status da RM e do PC (A -> Aprovado, E -> Em Aprovação, R -> Reprovado)
-            mapa_status = {"A": "Aprovado", "E": "Em Aprovação", "R": "Reprovado"}
+            # Dicionário de tradução das siglas de Status da RM e do PC
+            mapa_status_extenso = {"A": "Aprovado", "E": "Em Aprovação", "R": "Reprovado", "---": "---"}
             
-            if "status_documento" in df_final.columns:
-                df_final["status_documento"] = df_final["status_documento"].map(lambda x: mapa_status.get(str(x).upper().strip(), x))
-            if "status_pc" in df_final.columns:
-                df_final["status_pc"] = df_final["status_pc"].map(lambda x: mapa_status.get(str(x).upper().strip(), x))
+            # Aplica a tradução estrita mapeando os valores de texto
+            if "status_documento" in df_filtrado.columns:
+                df_filtrado["status_documento"] = df_filtrado["status_documento"].astype(str).str.strip().map(lambda x: mapa_status_extenso.get(x.upper(), x))
+            if "status_pc" in df_filtrado.columns:
+                df_filtrado["status_pc"] = df_filtrado["status_pc"].astype(str).str.strip().map(lambda x: mapa_status_extenso.get(x.upper(), x))
 
             # Limpa as casas decimais das colunas de quantidade do Mega (.000000 -> inteiro)
-            if "qtd_solicitada" in df_final.columns:
-                df_final["qtd_solicitada"] = pd.to_numeric(df_final["qtd_solicitada"], errors="coerce").fillna(0).astype(int)
-            if "quantidade_comprada" in df_final.columns:
-                df_final["quantidade_comprada"] = pd.to_numeric(df_final["quantidade_comprada"], errors="coerce").fillna(0).astype(int)
+            if "qtd_solicitada" in df_filtrado.columns:
+                df_filtrado["qtd_solicitada"] = pd.to_numeric(df_filtrado["qtd_solicitada"], errors="coerce").fillna(0).astype(int)
+            if "quantidade_comprada" in df_filtrado.columns:
+                df_filtrado["quantidade_comprada"] = pd.to_numeric(df_filtrado["quantidade_comprada"], errors="coerce").fillna(0).astype(int)
 
-            # Formatação de datas para padrão brasileiro BR
+            # Formatação de datas comuns para o padrão brasileiro (DD/MM/AAAA)
             datas_comuns = ["data_emissao", "data_necessidade", "entrega"]
             for col in datas_comuns:
-                if col in df_final.columns:
-                    df_final[col] = pd.to_datetime(df_final[col], errors="coerce").dt.strftime("%d/%m/%Y")
+                if col in df_filtrado.columns:
+                    df_filtrado[col] = pd.to_datetime(df_filtrado[col], errors="coerce").dt.strftime("%d/%m/%Y")
                     
+            # Formatação de datas com hora para as ocorrências de auditoria do Approvo
             datas_horas = ["data_ocorrencia", "data_ocorrencia_pc"]
             for col in datas_horas:
-                if col in df_final.columns:
-                    df_final[col] = pd.to_datetime(df_final[col], errors="coerce").dt.strftime("%d/%m/%Y %H:%M")
+                if col in df_filtrado.columns:
+                    df_filtrado[col] = pd.to_datetime(df_filtrado[col], errors="coerce").dt.strftime("%d/%m/%Y %H:%M")
 
-            # Tratamento de valores nulos para strings de exibição limpa
-            df_final.fillna("---", inplace=True)
+            # Garante que qualquer campo que tenha ficado nulo após os filtros exiba traços limpos
+            df_filtrado.fillna("---", inplace=True)
+            df_filtrado.replace("nan", "---", inplace=True)
 
-            # Mapeamento de colunas estruturado no formato MultiIndex (Super Cabeçalho Agrupado)
+            # Estrutura do Dicionário de MultiIndex (Vincula colunas físicas às colunas executivas coloridas)
             colunas_multi_index = {
                 "nome_solicitante":   ("REQUISICAO DE MATERIAL MEGA", "Requisitante"),
                 "rm":                 ("REQUISICAO DE MATERIAL MEGA", "Nr. RM"),
@@ -176,7 +239,6 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
                 "data_necessidade":   ("REQUISICAO DE MATERIAL MEGA", "Data da Nec."),
                 
                 "status_documento":   ("APPROVAL (RM)", "Status da Aprovação"),
-                "data_ocorrência":    ("APPROVAL (RM)", "Data da Aprovação"), # Trata variação de acento se houver
                 "data_ocorrencia":    ("APPROVAL (RM)", "Data da Aprovação"),
                 "nome_aprovador":     ("APPROVAL (RM)", "Aprovador"),
                 
@@ -190,10 +252,11 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
                 "nome_aprovador_pc":  ("APPROVAL (PC)", "Aprovador")
             }
 
-            # Filtra apenas as colunas mapeadas e monta o cabeçalho duplo do Pandas
-            colunas_existentes = [col for col in colunas_multi_index.keys() if col in df_final.columns]
-            df_exibicao = df_final[colunas_existentes].copy()
+            # Filtra apenas as colunas mapeadas presentes e monta o cabeçalho duplo agrupado do Pandas
+            colunas_existentes = [col for col in colunas_multi_index.keys() if col in df_filtrado.columns]
+            df_exibicao = df_filtrado[colunas_existentes].copy()
             df_exibicao.columns = pd.MultiIndex.from_tuples([colunas_multi_index[c] for c in colunas_existentes])
+
 
             # ==========================================================
             # 🎨 7. MAPA DE ESTILIZAÇÃO CSS DE CORES (IDENTIDADE PASTEL)
