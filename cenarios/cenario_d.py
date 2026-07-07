@@ -63,40 +63,46 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
                     df_pc_bruto = pd.DataFrame(res_pc.data)
 
                         # ==========================================================
-                        # ==========================================================
-            # 🔄 5. LOGÍSTICA DE CRUZAMENTO DE DADOS (PANDAS MERGE) - CORRIGIDO
+            # 🔄 5. LOGÍSTICA DE CRUZAMENTO DE DADOS (PANDAS MERGE)
             # ==========================================================
-            # Converte as chaves de cruzamento para texto para evitar incompatibilidade de tipos
-            df_rm_bruto["rm_str"] = df_rm_bruto["rm"].astype(str)
+            # 🚨 PASSO CRÍTICO: Remove linhas duplicadas geradas pelo histórico de ocorrências da primeira view
+            # Isso reduz as linhas repetidas do 'MATERIAL D' de volta ao registro único da RM
+            df_rm_limpo = df_rm_bruto.drop_duplicates(subset=["rm", "mat", "seq_item"]).copy()
+            
+            df_rm_limpo["rm_str"] = df_rm_limpo["rm"].astype(str)
             
             if not df_vinculo.empty:
                 df_vinculo["rm_str"] = df_vinculo["rm"].astype(str)
                 df_vinculo["pedido_str"] = df_vinculo["pedido"].astype(str)
                 
-                # 1. Junta a RM com a tabela que diz qual pedido ela gerou
-                df_consolidado = pd.merge(df_rm_bruto, df_vinculo[["rm_str", "pedido_str"]], on="rm_str", how="left")
+                # Junta o DataFrame limpo da RM com a tabela que diz qual pedido ela gerou
+                df_consolidado = pd.merge(df_rm_limpo, df_vinculo[["rm_str", "pedido_str"]], on="rm_str", how="left")
                 
                 if not df_pc_bruto.empty:
                     df_pc_bruto["pedido_str"] = df_pc_bruto["pedido"].astype(str)
                     
+                    # 🚨 Remove duplicados também da view do PC caso ela tenha várias ocorrências históricas
+                    df_pc_limpo = df_pc_bruto.drop_duplicates(subset=["pedido", "mat", "item_pedido"]).copy()
+                    
                     # Renomeia colunas duplicadas da segunda view para não chocar com a primeira
-                    df_pc_bruto.rename(columns={
+                    df_pc_limpo.rename(columns={
                         "status_documento": "status_pc",
-                        "data_oficial_ocorrencia": "data_ocorrencia_pc",
                         "data_ocorrencia": "data_ocorrencia_pc",
                         "nome_aprovador": "nome_aprovador_pc",
-                        "quantidade": "quantidade_comprada" # Evita chocar com qtd_solicitada
+                        "quantidade": "quantidade_comprada"
                     }, inplace=True, errors="ignore")
                     
-                    # 🚨 CORREÇÃO DO CRUZAMENTO: Cruzamos APENAS por pedido_str para garantir 
-                    # que os dados do comprador e aprovação do PC se acoplem sem multiplicar linhas
-                    df_final = pd.merge(df_consolidado, df_pc_bruto, on="pedido_str", how="left")
+                    # Cruza os dados ligando pelo número do pedido e pelo código do material corporativo
+                    if "mat" in df_consolidado.columns and "mat" in df_pc_limpo.columns:
+                        df_final = pd.merge(df_consolidado, df_pc_limpo, on=["pedido_str", "mat"], how="left")
+                    else:
+                        df_final = pd.merge(df_consolidado, df_pc_limpo, on="pedido_str", how="left")
                 else:
                     df_final = df_consolidado.copy()
                     for col in ["comprador", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"]:
                         df_final[col] = None
             else:
-                df_final = df_rm_bruto.copy()
+                df_final = df_rm_limpo.copy()
                 df_final["pedido_str"] = None
                 for col in ["comprador", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"]:
                     df_final[col] = None
@@ -112,13 +118,19 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
             if "status_pc" in df_final.columns:
                 df_final["status_pc"] = df_final["status_pc"].map(lambda x: mapa_status.get(str(x).upper().strip(), x))
 
-            # Formatação de datas para padrão BR
+            # Limpa as casas decimais das colunas de quantidade do Mega (.000000 -> inteiro)
+            if "qtd_solicitada" in df_final.columns:
+                df_final["qtd_solicitada"] = pd.to_numeric(df_final["qtd_solicitada"], errors="coerce").fillna(0).astype(int)
+            if "quantidade_comprada" in df_final.columns:
+                df_final["quantidade_comprada"] = pd.to_numeric(df_final["quantidade_comprada"], errors="coerce").fillna(0).astype(int)
+
+            # Formatação de datas para padrão brasileiro BR
             datas_comuns = ["data_emissao", "data_necessidade", "entrega"]
             for col in datas_comuns:
                 if col in df_final.columns:
                     df_final[col] = pd.to_datetime(df_final[col], errors="coerce").dt.strftime("%d/%m/%Y")
                     
-            datas_horas = ["data_oficial_ocorrencia", "data_ocorrencia", "data_ocorrencia_pc"]
+            datas_horas = ["data_ocorrencia", "data_ocorrencia_pc"]
             for col in datas_horas:
                 if col in df_final.columns:
                     df_final[col] = pd.to_datetime(df_final[col], errors="coerce").dt.strftime("%d/%m/%Y %H:%M")
@@ -137,14 +149,14 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
                 "data_necessidade":   ("REQUISICAO DE MATERIAL MEGA", "Data da Nec."),
                 
                 "status_documento":   ("APPROVAL (RM)", "Status da Aprovação"),
-                "data_oficial_ocorrencia": ("APPROVAL (RM)", "Data da Aprovação"),
+                "data_ocorrência":    ("APPROVAL (RM)", "Data da Aprovação"), # Trata variação de acento se houver
                 "data_ocorrencia":    ("APPROVAL (RM)", "Data da Aprovação"),
                 "nome_aprovador":     ("APPROVAL (RM)", "Aprovador"),
                 
                 "comprador":          ("PEDIDO DE COMPRA MEGA", "Comprador"),
                 "pedido_str":         ("PEDIDO DE COMPRA MEGA", "Nr. PC"),
                 "entrega":            ("PEDIDO DE COMPRA MEGA", "Data de Entrega"),
-                "quantidade_comprada": ("PEDIDO DE COMPRA MEGA", "Qt. Compr."),
+                "quantidade_comprada":("PEDIDO DE COMPRA MEGA", "Qt. Compr."),
                 
                 "status_pc":          ("APPROVAL (PC)", "Status da Aprovação"),
                 "data_ocorrencia_pc": ("APPROVAL (PC)", "Data da Aprovação"),
@@ -160,10 +172,9 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
             # 🎨 7. MAPA DE ESTILIZAÇÃO CSS DE CORES (IDENTIDADE PASTEL)
             # ==========================================================
             def aplicar_cores_corpo(df):
-                """Aplica cores suaves nas células de dados divididas por grupos"""
                 estilos = pd.DataFrame('', index=df.index, columns=df.columns)
                 for col in df.columns:
-                    grupo = col[0] # Captura o primeiro nível do MultiIndex (O Super Cabeçalho)
+                    grupo = col[0] # Alvo: Captura a string do nível superior do MultiIndex
                     if grupo == "REQUISICAO DE MATERIAL MEGA":
                         estilos[col] = 'background-color: #f2f7f2; color: #000000;'
                     elif grupo == "APPROVAL (RM)":
@@ -191,6 +202,7 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
 
         except Exception as e:
             st.error(f"❌ Erro crítico ao consolidar as visões no Cenário D: {e}")
+
 
 if __name__ == "__main__":
     # Garante que se o Streamlit chamar o arquivo direto, ele não quebra por falta de parâmetros
