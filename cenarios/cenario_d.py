@@ -37,32 +37,29 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
     # 4. CAPTURA E EXTRAÇÃO DAS TRÊS ORIGENS DE DADOS
     with st.spinner("Consolidando dados logísticos na nuvem..."):
         try:
-            # A. Busca a RM e seus fluxos na primeira view
+                        # A. Busca a RM e já elimina duplicados da origem
             res_rm = supabase.table("vw_approvo_rm").select("*").eq("rm", str(buscar_rm)).execute()
             df_rm_bruto = pd.DataFrame(res_rm.data)
+            if not df_rm_bruto.empty:
+                df_rm_bruto = df_rm_bruto.drop_duplicates() # 🚨 Limpa duplicados idênticos da RM
 
-            # B. Busca a tabela de relacionamento para descobrir qual Pedido essa RM gerou
+            # B. Busca a tabela de relacionamento
             res_vinculo = supabase.table("pedido_compra").select("rm", "pedido").eq("rm", int(buscar_rm)).execute()
             df_vinculo = pd.DataFrame(res_vinculo.data)
-
-            if df_rm_bruto.empty:
-                st.warning(f"Nenhum registro localizado para a RM {buscar_rm} na view `vw_approvo_rm`.")
-                st.stop()
-
-            # C. Inicializa o DataFrame do Pedido vazio (caso a RM não tenha gerado pedido ainda)
-            df_pc_bruto = pd.DataFrame()
-
-            # Se a RM possuir um vínculo com pedido_compra, busca os dados da segunda view
             if not df_vinculo.empty:
-                # Remove duplicados e extrai a lista de pedidos gerados por essa RM
+                df_vinculo = df_vinculo.drop_duplicates() # 🚨 Limpa duplicados idênticos do Vínculo
+
+            # C. Busca os dados da segunda view baseada nos pedidos
+            if not df_vinculo.empty:
                 lista_pedidos = list(set([str(p.get("pedido")) for p in res_vinculo.data if p.get("pedido") is not None]))
-                
                 if lista_pedidos:
-                    # Busca os dados da segunda view baseada nos pedidos encontrados
                     res_pc = supabase.table("vw_approvo_pc").select("*").in_("pedido", lista_pedidos).execute()
                     df_pc_bruto = pd.DataFrame(res_pc.data)
+                    if not df_pc_bruto.empty:
+                        # 🚨 LIMPA DUPLICADOS DA ORIGEM DO PC (Resolve o problema do print!)
+                        df_pc_bruto = df_pc_bruto.drop_duplicates() 
 
-             # ==========================================================
+                        # ==========================================================
             # 🔄 5. LOGÍSTICA DE CRUZAMENTO DE DADOS (PANDAS MERGE) - BLINDADO
             # ==========================================================
             # 🚨 1. FORÇA A LIMPEZA E PADRONIZAÇÃO DE TEXTOS/NÚMEROS DA VIEW DA RM
@@ -115,6 +112,14 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
                 df_final["pedido_str"] = None
                 for col in ["comprador", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"]:
                     df_final[col] = None
+
+            # 🚨 5. TRAVA ANTIDUPLICIDADE FINAL BASEADA NO MATERIAL SOLICITADO
+            if "mat" in df_final.columns:
+                df_final = df_final.drop_duplicates(subset=["rm", "mat"]).copy()
+            else:
+                df_final = df_final.drop_duplicates().copy()
+
+                    
             # ==========================================================
             # 📊 6. MAPEAMENTO, TRADUÇÃO E FORMATAÇÃO VISUAL
             # ==========================================================
