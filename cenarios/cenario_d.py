@@ -67,7 +67,6 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
             df_rm_bruto["mat_str"] = df_rm_bruto["mat"].astype(str).str.strip()
             
             # 🚨 2. RESOLVE A DUPLICIDADE: Mantém apenas as colunas fundamentais que você quer ver na tela
-            # Isso joga fora qualquer ID ou Timestamp oculto que estava multiplicando as linhas
             colunas_vitais_rm = ["nome_solicitante", "rm", "mat", "desc_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "rm_str", "mat_str"]
             colunas_existentes_rm = [c for c in colunas_vitais_rm if c in df_rm_bruto.columns]
             
@@ -86,6 +85,7 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
                     df_pc_bruto["mat_str"] = df_pc_bruto["mat"].astype(str).str.strip()
                     
                     # Limpa o histórico de ocorrências do PC mantendo apenas os dados de exibição
+                    # Importante: Não colocamos 'entregas_agendadas' aqui para isolar a coluna problemática
                     colunas_vitais_pc = ["pedido_str", "mat_str", "comprador", "entrega", "quantidade", "status_documento", "data_ocorrencia", "nome_aprovador"]
                     colunas_existentes_pc = [c for c in colunas_vitais_pc if c in df_pc_bruto.columns]
                     
@@ -101,7 +101,6 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
                     }, inplace=True, errors="ignore")
                     
                     # 🚨 4. EXECUTA O CRUZAMENTO PERFEITO POR NÚMERO DO PEDIDO E CÓDIGO DO MATERIAL
-                    # Como ambos agora são strings limpas (mat_str), o Pandas vai conseguir casar os dados
                     df_final = pd.merge(df_consolidado, df_pc_limpo, on=["pedido_str", "mat_str"], how="left")
                 else:
                     df_final = df_consolidado.copy()
@@ -113,13 +112,19 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
                 for col in ["comprador", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"]:
                     df_final[col] = None
 
-            # 🚨 5. TRAVA ANTIDUPLICIDADE FINAL BASEADA NO MATERIAL SOLICITADO
+            # 🚨 5. SOLUÇÃO DEFINITIVA DO ERRO 'unhashable type: list':
+            # Removemos qualquer coluna de lista/JSONB residual (como entregas_agendadas) antes do drop_duplicates
+            colunas_para_remover = ["entregas_agendadas"]
+            colunas_reais_para_tirar = [c for c in colunas_para_remover if c in df_final.columns]
+            if colunas_reais_para_tirar:
+                df_final.drop(columns=colunas_reais_para_tirar, inplace=True)
+
+            # Agora que a lista foi removida do DataFrame, o comando roda com 100% de sucesso e velocidade
             if "mat" in df_final.columns:
                 df_final = df_final.drop_duplicates(subset=["rm", "mat"]).copy()
             else:
-                # Caso a coluna mat não exista por algum motivo, lista colunas seguras para o subset
-                colunas_seguras = [c for c in df_final.columns if c != "entregas_agendadas"]
-                df_final = df_final.drop_duplicates(subset=colunas_seguras).copy()
+                df_final = df_final.drop_duplicates().copy()
+
                     
             # ==========================================================
             # 📊 6. MAPEAMENTO, TRADUÇÃO E FORMATAÇÃO VISUAL
