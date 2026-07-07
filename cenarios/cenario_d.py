@@ -18,65 +18,85 @@ if "logado" not in st.session_state or not st.session_state.logado:
 
 def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Skinner_status=None):
     """
-    Função padrão que renderiza a tela do Approvo Status (Cenário D).
-    Realiza a leitura da nova view de ocorrências históricas vw_approvo_rm.
+    Cenário D - Exibição Consolidada da view vw_approvo_rm
+    Mapeia colunas corporativas e traduz as siglas de status de aprovação.
     """
     st.subheader("✅ Approvo Status — Cenário D")
-    st.write("Histórico completo de ocorrências e assinaturas de aprovação por RM.")
+    st.write("Acompanhamento unificado de Requisições de Material e fluxos do Approvo.")
     st.divider()
 
-    # 2. INICIALIZAÇÃO LOCAL DO BANCO (SE CLICADO PELO MENU LATERAL)
+    # 2. INICIALIZAÇÃO LOCAL DO BANCO (SE ACESSADO DIRETO PELO MENU LATERAL)
     if supabase is None:
         SUPABASE_URL = os.getenv("SUPABASE_URL") or st.secrets.get("SUPABASE_URL")
         SUPABASE_KEY = os.getenv("SUPABASE_KEY") or st.secrets.get("SUPABASE_KEY")
         supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-    # 3. FILTROS AVANÇADOS NA INTERFACE
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        buscar_rm = st.text_input("Filtrar por Número da RM:", value=rm_para_conferencia).strip()
-    with col2:
-        buscar_aprovador = st.text_input("Buscar por Nome do Aprovador:", "").strip()
-    with col3:
-        filtro_status_doc = st.selectbox("Status no Approvo:", ["Todos", "Aprovado", "Rejeitado", "Pendente"])
+    # 3. CAMPO DE BUSCA INICIAL (FILTRO RÁPIDO)
+    buscar_rm = st.text_input("Filtrar por Número da RM:", value=rm_para_conferencia).strip()
 
-    # 4. CONSULTA DOS DADOS NA NOVA VIEW
-    with st.spinner("Consultando histórico na view `vw_approvo_rm`..."):
+    # 4. CONSULTA DOS DADOS NA VIEW
+    with st.spinner("Consultando dados na view `vw_approvo_rm`..."):
         try:
-            # Aponta para a nova view criada
             query = supabase.table("vw_approvo_rm").select("*")
             
-            # Aplicação dos filtros dinâmicos
             if buscar_rm:
                 query = query.eq("rm", str(buscar_rm))
-            if buscar_aprovador:
-                query = query.ilike("nome_aprovador", f"%{buscar_aprovador}%")
-            if filtro_status_doc != "Todos":
-                query = query.eq("status_documento", filtro_status_doc)
                 
             resposta = query.execute()
             dados = resposta.data
             
             if dados:
-                df = pd.DataFrame(dados)
+                df_bruto = pd.DataFrame(dados)
                 
-                # Formata as datas para exibição legível na tabela brasileira
-                if "data_ocorrencia" in df.columns:
-                    df["data_ocorrencia"] = pd.to_datetime(df["data_ocorrencia"], errors="coerce").dt.strftime("%d/%m/%Y %H:%M")
+                # 🚨 MAPEAMENTO E TRADUÇÃO DO STATUS (A -> Aprovado, E -> Em Aprovação, R -> Reprovado)
+                # O .get() evita erros caso o banco traga alguma sigla nova ou imprevista
+                mapa_status = {"A": "Aprovado", "E": "Em Aprovação", "R": "Reprovado"}
+                if "status_documento" in df_bruto.columns:
+                    df_bruto["status_documento"] = df_bruto["status_documento"].map(lambda x: mapa_status.get(str(x).upper().strip(), x))
+
+                # TRATAMENTO E FORMATAÇÃO DE DATAS PARA O PADRÃO BRASILEIRO (DD/MM/AAAA)
+                colunas_data = ["data_emissao", "data_necessidade"]
+                for col in colunas_data:
+                    if col in df_bruto.columns:
+                        df_bruto[col] = pd.to_datetime(df_bruto[col], errors="coerce").dt.strftime("%d/%m/%Y")
+                        
+                # A data da ocorrência (Aprovação) ganha também os minutos para auditoria completa
+                if "data_ocorrencia" in df_bruto.columns:
+                    df_bruto["data_ocorrencia"] = pd.to_datetime(df_bruto["data_ocorrencia"], errors="coerce").dt.strftime("%d/%m/%Y %H:%M")
+
+                # 🚨 FILTRO E RENOMEAÇÃO DE COLUNAS PARA O LAYOUT EXECUTIVO SOLICITADO
+                # Dicionário mapeia: 'nome_na_view': 'Nome que você quer na tela'
+                colunas_mapeadas = {
+                    "nome_solicitante": "Requisitante",
+                    "rm":               "Nr RM",
+                    "desc_item":        "Descrição",
+                    "data_emissao":     "Dt Requisição",
+                    "data_necessidade": "Dt Necessidade",
+                    "status_documento": "Status RM",
+                    "data_ocorrencia":  "Data Aprovação",
+                    "nome_aprovador":   "Aprovador"
+                }
                 
-                # Ordena os registros para mostrar sempre os itens na sequência correta do documento
-                if "seq_item" in df.columns:
-                    df = df.sort_values(by="seq_item")
-                    
-                # Exibe a tabela estruturada na tela
-                st.dataframe(df, use_container_width=True, hide_index=True)
+                # Garante que só tentará exibir colunas que realmente existem no DataFrame
+                colunas_existentes = [col for col in colunas_mapeadas.keys() if col in df_bruto.columns]
+                
+                # Filtra apenas as colunas desejadas na ordem estipulada
+                df_exibicao = df_bruto[colunas_existentes].copy()
+                
+                # Aplica os novos títulos amigáveis
+                df_exibicao.rename(columns=colunas_mapeadas, inplace=True)
+                
+                # Organiza a exibição visual na tela do Streamlit
+                st.write(f"📋 Exibindo **{len(df_exibicao)}** registro(s) da requisição:")
+                st.dataframe(df_exibicao, use_container_width=True, hide_index=True)
+                
             else:
-                st.info("Nenhum histórico de ocorrência localizado para os critérios aplicados.")
+                st.info("Nenhum dado localizado para os critérios selecionados.")
                 
         except Exception as e:
-            st.error(f"❌ Erro ao processar a consulta do Cenário D: {e}")
+            st.error(f"❌ Erro ao processar a tabela do Cenário D: {e}")
 
 
-# Execução nativa se clicado direto no menu lateral esquerdo
+# Execução automática nativa pelo Streamlit na navegação do menu lateral
 if __name__ == "__main__":
     renderizar_cenario_d()
