@@ -88,7 +88,7 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
                     
                     # Junta o resultado final com a view de Pedidos de Compra
                     # Cruzamos por 'pedido_str' e por 'mat' (código do material) para alinhar os itens corretamente
-                    if "mat" in df_consolidated.columns and "mat" in df_pc_bruto.columns:
+                    if "mat" in df_consolidado.columns and "mat" in df_pc_bruto.columns:
                         df_final = pd.merge(df_consolidado, df_pc_bruto, on=["pedido_str", "mat"], how="left")
                     else:
                         df_final = pd.merge(df_consolidado, df_pc_bruto, on="pedido_str", how="left")
