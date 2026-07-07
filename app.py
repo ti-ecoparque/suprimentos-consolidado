@@ -120,7 +120,7 @@ def renderizar_painel_principal():
         elif periodo:
             renderizar_cenario_c(periodo, status_selecionados, supabase, Skinner_status)
         else:
-            renderizar_cenario_d(rm_para_conferencia, pedidos, supabase, Skinner_status)    
+            renderizar_cenario_d()    
 
 
 # --- 2. CONFIGURAÇÃO DE NAVEGAÇÃO E SUCESSO DO MENU ---
