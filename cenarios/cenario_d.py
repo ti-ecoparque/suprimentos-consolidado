@@ -117,8 +117,9 @@ def renderizar_cenario_d(rm_para_conferencia="", pedidos=None, supabase=None, Sk
             if "mat" in df_final.columns:
                 df_final = df_final.drop_duplicates(subset=["rm", "mat"]).copy()
             else:
-                df_final = df_final.drop_duplicates().copy()
-
+                # Caso a coluna mat não exista por algum motivo, lista colunas seguras para o subset
+                colunas_seguras = [c for c in df_final.columns if c != "entregas_agendadas"]
+                df_final = df_final.drop_duplicates(subset=colunas_seguras).copy()
                     
             # ==========================================================
             # 📊 6. MAPEAMENTO, TRADUÇÃO E FORMATAÇÃO VISUAL
