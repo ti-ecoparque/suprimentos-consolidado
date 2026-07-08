@@ -186,11 +186,10 @@ if not st.session_state.logado:
 
 
 # ==========================================================
-# --- 4. BARRA LATERAL E LOGOUT (CORRIGIDO ANTI-DUPLICIDADE) ---
+# --- 4. BARRA LATERAL E LOGOUT (CORRIGIDO) ---
 # ==========================================================
-# 🚨 TRAVA CRÍTICA: Só desenha o menu lateral e o botão de logout se o usuário 
-# estiver de fato autenticado E se a página atual executada for a principal (app.py)
-if st.session_state.logado and pg.current_path == "app.py":
+# 🚨 AJUSTE DE ATRIBUTO: Mudado de pg.current_path para pg.current_page.path
+if st.session_state.logado and pg.current_page.path == "app.py":
     with st.sidebar:
         st.write(f"👤 Conectado como: **{st.session_state.usuario_atual}**")
         st.divider()
@@ -203,12 +202,11 @@ if st.session_state.logado and pg.current_path == "app.py":
 # ==========================================================
 # --- 5. RENDERIZAÇÃO INTELIGENTE DO CONTEÚDO ---
 # ==========================================================
-if pg.current_path == "app.py":
-    # Se estiver na home e logado, renderiza o conteúdo do painel
+# 🚨 AJUSTE DE ATRIBUTO: Mudado de pg.current_path para pg.current_page.path
+if pg.current_page.path == "app.py":
     if st.session_state.logado:
         renderizar_painel_principal()
 else:
-    # Se o usuário clicar em qualquer outra aba do menu (como Approvo Status),
-    # o st.navigation assume o controle e roda o respectivo arquivo de forma nativa e limpa,
-    # impedindo que o código do app.py se repita e duplique chaves.
+    # Se o usuário estiver em qualquer outra página (como pages/approvo.py),
+    # o Streamlit roda o arquivo correspondente de forma nativa e isolada.
     pg.run()
