@@ -51,7 +51,20 @@ try:
 except Exception:
     opcoes_requisitas = ["Todos"]
 
-
+try:
+    # Busca apenas a coluna comprador da view de pedidos
+    res_nomes_comp = supabase.table("vw_approvo_pc").select("comprador").execute()
+    
+    compradores_unicos = set()
+    for linha in res_nomes_comp.data:
+        comp = linha.get("comprador")
+        # Se for nulo, nan ou vazio, ignora para não poluir o selectbox
+        if comp and pd.notna(comp) and str(comp).strip() != "" and str(comp).lower() != "nan":
+            compradores_unicos.add(str(comp).strip())
+            
+    opcoes_compradores = ["Todos"] + sorted(list(compradores_unicos))
+except Exception:
+    opcoes_compradores = ["Todos"]
 
 # ==========================================================
 # 🛠️ 4. INTERFACE GRÁFICA DOS FILTROS INDEPENDENTES (NOMES SINCRONIZADOS)
@@ -67,7 +80,7 @@ with col_f2:
     # 🔥 MUDADO DE TEXT_INPUT PARA SELECTBOX: Lista os nomes reais salvos no Supabase
     filtro_req = st.selectbox("Filtrar por Nome do Requisitante:", opcoes_requisitas)
 with col_f3:
-    buscar_comp = st.text_input("Filtrar por Nome do Comprador:", "").strip()
+    filtro_comp = st.selectbox("Filtrar por Nome do Comprador:", opcoes_compradores)
     
 with col_f4:
     filtro_status_rm = st.selectbox("Status da RM:", ["Todos", "Aprovado", "Em Aprovação", "Reprovado"])
