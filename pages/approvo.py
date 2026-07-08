@@ -167,8 +167,8 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                 if "entregas_agendadas" in df_pc_bruto.columns:
                     df_pc_bruto.drop(columns=["entregas_agendadas"], inplace=True)
 
-        # ==========================================================
-        # 🔄 7. LOGÍSTICA DE UNIFICAÇÃO (MERGE) E TRATAMENTO DE TEXTO
+                # ==========================================================
+        # 🔄 7. LOGÍSTICA DE UNIFICAÇÃO (MERGE) E TRATAMENTO DE TEXTO (SEGURO)
         # ==========================================================
         if "rm" in df_rm_bruto.columns:
             df_rm_bruto["rm_str"] = df_rm_bruto["rm"].fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
@@ -207,6 +207,14 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                     "quantidade": "quantidade_comprada"
                 }, inplace=True, errors="ignore")
                 
+                # 🚨 AJUSTE DE CASE-SENSITIVITY:
+                # Remove espaços em branco ocultos das chaves de cruzamento para garantir o acoplamento
+                df_consolidado["pedido_str"] = df_consolidado["pedido_str"].astype(str).str.strip()
+                df_consolidado["mat_str"] = df_consolidado["mat_str"].astype(str).str.strip()
+                df_pc_limpo["pedido_str"] = df_pc_limpo["pedido_str"].astype(str).str.strip()
+                df_pc_limpo["mat_str"] = df_pc_limpo["mat_str"].astype(str).str.strip()
+                
+                # Cruzamento limpo e auditado
                 df_final = pd.merge(df_consolidado, df_pc_limpo, on=["pedido_str", "mat_str"], how="left")
             else:
                 df_final = df_consolidado.copy()
@@ -218,22 +226,11 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             for col in ["comprador", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"]:
                 df_final[col] = None
 
-        # Trava rígida antiduplicidade por item
+        # Trava rígida antiduplicidade por item real
         if "mat" in df_final.columns and "rm" in df_final.columns:
             df_final = df_final.drop_duplicates(subset=["rm", "mat"]).copy()
         else:
             df_final = df_final.drop_duplicates().copy()
-
-        # Filtro de intervalo de período individualizado contra listas
-        if len(filtro_periodo) == 2:
-            data_inicio = pd.to_datetime(filtro_periodo[0])
-            data_fim = pd.to_datetime(filtro_periodo[1])
-            df_final["data_emissao_dt"] = pd.to_datetime(df_final["data_emissao"], errors="coerce")
-            df_final = df_final[(df_final["data_emissao_dt"] >= data_inicio) & (df_final["data_emissao_dt"] <= data_fim)]
-
-        if df_final.empty:
-            st.warning("⚠️ Nenhum registro corresponde ao intervalo de datas selecionado.")
-            st.stop()
 
         # ==========================================================
         # 📊 8. MAPEAMENTO, TRADUÇÃO E MULTIINDEX DO LAYOUT
