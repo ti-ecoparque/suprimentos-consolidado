@@ -30,27 +30,9 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# 4. INTERFACE GRÁFICA DOS FILTROS INDEPENDENTES
-st.markdown("#### 🔍 Painel de Filtros Globais")
-
-col_f1, col_f2, col_f3 = st.columns(3)
-col_f4, col_f5, col_f6 = st.columns(3)
-
-with col_f1:
-    buscar_rm = st.text_input("Filtrar por Número da RM:", "").strip()
-with col_f2:
-    buscar_req = st.text_input("Filtrar por Nome do Requisitante:", "").strip()
-with col_f3:
-    buscar_comp = st.text_input("Filtrar por Nome do Comprador:", "").strip()
-    
-with col_f4:
-    filtro_status_rm = st.selectbox("Status da RM:", ["Todos", "Aprovado", "Em Aprovação", "Reprovado"])
-with col_f5:
-    filtro_status_pc = st.selectbox("Status do PC:", ["Todos", "Aprovado", "Em Aprovação", "Reprovado"])
-with col_f6:
-    filtro_periodo = st.date_input("Intervalo (Data da Requisição):", value=[], format="DD/MM/YYYY")
-
-# 5. CONSTRUÇÃO DA QUERY INTELIGENTE
+# ==========================================================
+# 🚀 4. CONSTRUÇÃO DA QUERY INTELIGENTE E INDEPENDENTE (CORRIGIDO)
+# ==========================================================
 tem_filtro_ativo = buscar_rm or buscar_req or buscar_comp or filtro_status_rm != "Todos" or filtro_status_pc != "Todos" or len(filtro_periodo) == 2
 
 if not tem_filtro_ativo:
@@ -59,7 +41,7 @@ if not tem_filtro_ativo:
 
 with st.spinner("Buscando e cruzando visões comerciais..."):
     try:
-        # A. QUERY NA VIEW DE REQUISIÇÕES (RM)
+        # 📐 A. QUERY NA VIEW DE REQUISIÇÕES (RM)
         query_rm = supabase.table("vw_approvo_rm").select("*")
         
         if buscar_rm:
@@ -77,22 +59,29 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             st.warning("⚠️ Nenhum registro de RM localizado para os filtros aplicados.")
             st.stop()
 
-        # Extrai a lista de RMs localizadas para buscar os pedidos correspondentes
-        lista_rms_encontradas = list(set([int(r) for r in df_rm_bruto["rm"].unique() if r is not None and str(r).isdigit()]))
+        # Extrai a lista de RMs de forma segura contra floats/nulos
+        lista_rms_encontradas = []
+        if "rm" in df_rm_bruto.columns:
+            for r in df_rm_bruto["rm"].unique():
+                if pd.notna(r) and str(r).replace('.0', '').isdigit():
+                    lista_rms_encontradas.append(int(float(r)))
 
         df_vinculo = pd.DataFrame()
         df_pc_bruto = pd.DataFrame()
 
-        # B. QUERY NA TABELA DE VÍNCULO PEDIDO_COMPRA
+        # 📐 B. QUERY NA TABELA DE VÍNCULO PEDIDO_COMPRA
         if lista_rms_encontradas:
             res_vinculo = supabase.table("pedido_compra").select("rm", "pedido").in_("rm", lista_rms_encontradas).execute()
             df_vinculo = pd.DataFrame(res_vinculo.data)
 
         if not df_vinculo.empty:
-            lista_pedidos = list(set([str(p.get("pedido")) for p in res_vinculo.data if p.get("pedido") is not None]))
+            lista_pedidos = []
+            for p in df_vinculo["pedido"].unique():
+                if pd.notna(p) and str(p).replace('.0', '').isdigit():
+                    lista_pedidos.append(str(int(float(p))))
             
             if lista_pedidos:
-                # C. QUERY NA VIEW DE PEDIDOS (PC)
+                # 📐 C. QUERY NA VIEW DE PEDIDOS (PC)
                 query_pc = supabase.table("vw_approvo_pc").select("*").in_("pedido", lista_pedidos)
                 
                 if buscar_comp:
@@ -107,23 +96,34 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                 if "entregas_agendadas" in df_pc_bruto.columns:
                     df_pc_bruto.drop(columns=["entregas_agendadas"], inplace=True)
 
-        # 6. LOGÍSTICA DE UNIFICAÇÃO (MERGE) E ANTIDUPLICIDADE
-        df_rm_bruto["rm_str"] = df_rm_bruto["rm"].astype(str).str.strip()
-        df_rm_bruto["mat_str"] = df_rm_bruto["mat"].astype(str).str.strip()
-        
+        # ==========================================================
+        # 🔄 5. LOGÍSTICA DE UNIFICAÇÃO (MERGE) E ANTIDUPLICIDADE (BLINDADO)
+        # ==========================================================
+        # 🚨 SOLUÇÃO REAL CONTRA O ERRO 'upper': Forçamos o tratamento de nulos usando .astype(str) 
+        # substituindo NaNs por strings antes de aplicar qualquer tratamento de texto
+        if "rm" in df_rm_bruto.columns:
+            df_rm_bruto["rm_str"] = df_rm_bruto["rm"].fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
+        else:
+            df_rm_bruto["rm_str"] = ""
+
+        if "mat" in df_rm_bruto.columns:
+            df_rm_bruto["mat_str"] = df_rm_bruto["mat"].fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
+        else:
+            df_rm_bruto["mat_str"] = ""
+            
         colunas_vitais_rm = ["nome_solicitante", "rm", "mat", "desc_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "rm_str", "mat_str"]
         colunas_existentes_rm = [c for c in colunas_vitais_rm if c in df_rm_bruto.columns]
         df_rm_limpo = df_rm_bruto[colunas_existentes_rm].drop_duplicates().copy()
         
         if not df_vinculo.empty:
-            df_vinculo["rm_str"] = df_vinculo["rm"].astype(str).str.strip()
-            df_vinculo["pedido_str"] = df_vinculo["pedido"].astype(str).str.strip()
+            df_vinculo["rm_str"] = df_vinculo["rm"].fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
+            df_vinculo["pedido_str"] = df_vinculo["pedido"].fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
             
             df_consolidado = pd.merge(df_rm_limpo, df_vinculo[["rm_str", "pedido_str"]], on="rm_str", how="left")
             
             if not df_pc_bruto.empty:
-                df_pc_bruto["pedido_str"] = df_pc_bruto["pedido"].astype(str).str.strip()
-                df_pc_bruto["mat_str"] = df_pc_bruto["mat"].astype(str).str.strip()
+                df_pc_bruto["pedido_str"] = df_pc_bruto["pedido"].fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
+                df_pc_bruto["mat_str"] = df_pc_bruto["mat"].fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
                 
                 colunas_vitais_pc = ["pedido_str", "mat_str", "comprador", "entrega", "quantidade", "status_documento", "data_ocorrencia", "nome_aprovador"]
                 colunas_existentes_pc = [c for c in colunas_vitais_pc if c in df_pc_bruto.columns]
@@ -148,19 +148,26 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             for col in ["comprador", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"]:
                 df_final[col] = None
 
-        if "mat" in df_final.columns:
+        if "mat" in df_final.columns and "rm" in df_final.columns:
             df_final = df_final.drop_duplicates(subset=["rm", "mat"]).copy()
         else:
             df_final = df_final.drop_duplicates().copy()
 
         if len(filtro_periodo) == 2:
-            data_inicio, data_fim = pd.to_datetime(filtro_periodo), pd.to_datetime(filtro_periodo)
+            # Extrai os dois objetos de data de dentro da lista de forma individual e segura
+            data_inicio = pd.to_datetime(filtro_periodo[0])
+            data_fim = pd.to_datetime(filtro_periodo[1])
+            
+            # Garante que a coluna de data do banco seja convertida para formato Datetime do Pandas
             df_final["data_emissao_dt"] = pd.to_datetime(df_final["data_emissao"], errors="coerce")
+            
+            # Executa o filtro de intervalo de forma limpa e sem erros
             df_final = df_final[(df_final["data_emissao_dt"] >= data_inicio) & (df_final["data_emissao_dt"] <= data_fim)]
 
         if df_final.empty:
             st.warning("⚠️ Nenhum registro corresponde ao intervalo de datas selecionado.")
             st.stop()
+
 
         # 7. MAPEAMENTO, TRADUÇÃO E FORMATAÇÃO VISUAL
         mapa_status_extenso = {"A": "Aprovado", "E": "Em Aprovação", "R": "Reprovado", "---": "---"}
