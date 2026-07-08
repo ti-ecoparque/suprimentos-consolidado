@@ -125,14 +125,20 @@ def renderizar_painel_principal():
             renderizar_cenario_d()    
 
 
+# ==========================================================
 # --- 2. CONFIGURAÇÃO DE NAVEGAÇÃO E SUCESSO DO MENU ---
-pagina_painel = st.Page(renderizar_painel_principal, title="Painel Principal", icon="📊", default=True)
+# ==========================================================
+pagina_painel = st.Page("app.py", title="Painel Principal", icon="📊", default=True)
 pagina_pedido = st.Page("pages/le_rel_pedido_compra.py", title="Pedidos de Compra", icon="📦")
 pagina_solicitacao = st.Page("pages/le_rel_sol_compra.py", title="Solicitações de Compra", icon="📥")
 pagina_lepdf = st.Page("pages/lepdf.py", title="Integrador LePDF", icon="📂")
-pagina_approvo = st.Page("cenarios/cenario_d.py", title="Approvo Status", icon="✅")
 
+# 🚨 AJUSTADO: Aponta para a pasta e o nome correto do arquivo que você criou!
+pagina_approvo = st.Page("pages/approvo.py", title="Approvo Status", icon="✅")
+
+# Declara a lista de navegação unificada e padronizada por arquivos
 pg = st.navigation([pagina_painel, pagina_pedido, pagina_solicitacao, pagina_lepdf, pagina_approvo])
+
 
 
 # --- 3. SISTEMA DE AUTO-LOGIN SEGURO NATIVO (À PROVA DE F5) ---
