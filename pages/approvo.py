@@ -93,7 +93,8 @@ with col_f6:
 # 🚀 5. TRAVA DE VALIDAÇÃO DE FILTROS SELECIONADOS
 # ==========================================================
 # 🚨 SUBSTITUA A LINHA DA TRAVA POR ESTA:
-tem_filtro_ativo = buscar_rm or filtro_req != "Todos" or buscar_comp or filtro_status_rm != "Todos" or filtro_status_pc != "Todos" or len(filtro_periodo) == 2
+# 🚨 COLOQUE A TRAVA EXATAMENTE ASSIM:
+tem_filtro_ativo = buscar_rm or filtro_req != "Todos" or filtro_comp != "Todos" or filtro_status_rm != "Todos" or filtro_status_pc != "Todos" or len(filtro_periodo) == 2
 
 
 if not tem_filtro_ativo:
@@ -151,8 +152,10 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             if lista_pedidos:
                 query_pc = supabase.table("vw_approvo_pc").select("*").in_("pedido", lista_pedidos)
                 
-                if buscar_comp:
-                    query_pc = query_pc.ilike("comprador", f"%{buscar_comp}%")
+                # 🚨 Trecho atualizado e sincronizado com o Selectbox de Compradores
+                if filtro_comp != "Todos":
+                    query_pc = query_pc.eq("comprador", filtro_comp)
+                    
                 if filtro_status_pc != "Todos":
                     mapa_invertido = {"Aprovado": "A", "Em Aprovação": "E", "Reprovado": "R"}
                     query_pc = query_pc.eq("status_documento", mapa_invertido[filtro_status_pc])
@@ -164,7 +167,7 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                 if "entregas_agendadas" in df_pc_bruto.columns:
                     df_pc_bruto.drop(columns=["entregas_agendadas"], inplace=True)
 
-                # ==========================================================
+        # ==========================================================
         # 🔄 7. LOGÍSTICA DE UNIFICAÇÃO (MERGE) E TRATAMENTO DE TEXTO
         # ==========================================================
         if "rm" in df_rm_bruto.columns:
