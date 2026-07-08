@@ -156,9 +156,9 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                 if filtro_comp != "Todos":
                     query_pc = query_pc.eq("nome_solicitante", filtro_comp)
                     
-                if filtro_status_pc != "Todos":
-                    mapa_invertido = {"Aprovado": "A", "Em Aprovação": "E", "Reprovado": "R"}
-                    query_pc = query_pc.eq("status_documento", mapa_invertido[filtro_status_pc])
+                #if filtro_status_pc != "Todos":
+                    #mapa_invertido = {"Aprovado": "A", "Em Aprovação": "E", "Reprovado": "R"}
+                    #query_pc = query_pc.eq("status_documento", mapa_invertido[filtro_status_pc])
                     
                 res_pc = query_pc.execute()
                 df_pc_bruto = pd.DataFrame(res_pc.data)
@@ -167,7 +167,7 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                 if "entregas_agendadas" in df_pc_bruto.columns:
                     df_pc_bruto.drop(columns=["entregas_agendadas"], inplace=True)
 
-                # ==========================================================
+        # ==========================================================
         # 🔄 7. LOGÍSTICA DE UNIFICAÇÃO (MERGE) E TRATAMENTO DE TEXTO (SEGURO)
         # ==========================================================
         if "rm" in df_rm_bruto.columns:
@@ -207,31 +207,45 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                     "quantidade": "quantidade_comprada"
                 }, inplace=True, errors="ignore")
                 
-                # 🚨 AJUSTE DE CASE-SENSITIVITY:
-                # Remove espaços em branco ocultos das chaves de cruzamento para garantir o acoplamento
+                # Ajuste de Case-Sensitivity e remoção de espaços em branco
                 df_consolidado["pedido_str"] = df_consolidado["pedido_str"].astype(str).str.strip()
                 df_consolidado["mat_str"] = df_consolidado["mat_str"].astype(str).str.strip()
                 df_pc_limpo["pedido_str"] = df_pc_limpo["pedido_str"].astype(str).str.strip()
                 df_pc_limpo["mat_str"] = df_pc_limpo["mat_str"].astype(str).str.strip()
                 
-                # Cruzamento limpo e auditado
+                # Cruzamento das tabelas
                 df_final = pd.merge(df_consolidado, df_pc_limpo, on=["pedido_str", "mat_str"], how="left")
+                
+                # 1. Filtro Combinado Rígido de Comprador
+                if filtro_comp != "Todos":
+                    df_final = df_final[df_final["comprador"].astype(str).str.strip() == str(filtro_comp).strip()]
+                
+                # 2. Filtro Combinado Rígido de Status do PC
+                if filtro_status_pc != "Todos":
+                    mapa_invertido = {"Aprovado": "A", "Em Aprovação": "E", "Reprovado": "R"}
+                    sigla_procurada = mapa_invertido[filtro_status_pc]
+                    df_final = df_final[df_final["status_pc"].astype(str).str.strip().str.upper() == sigla_procurada.upper()]
             else:
                 df_final = df_consolidado.copy()
                 for col in ["comprador", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"]:
                     df_final[col] = None
+                
+                if filtro_comp != "Todos" or filtro_status_pc != "Todos":
+                    df_final = pd.DataFrame(columns=df_final.columns)
         else:
             df_final = df_rm_limpo.copy()
             df_final["pedido_str"] = None
             for col in ["comprador", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"]:
                 df_final[col] = None
+                
+            if filtro_comp != "Todos" or filtro_status_pc != "Todos":
+                df_final = pd.DataFrame(columns=df_final.columns)
 
-        # Trava rígida antiduplicidade por item real
+        # 3. Trava rígida antiduplicidade por item real final
         if "mat" in df_final.columns and "rm" in df_final.columns:
             df_final = df_final.drop_duplicates(subset=["rm", "mat"]).copy()
         else:
             df_final = df_final.drop_duplicates().copy()
-
         # ==========================================================
         # 📊 8. MAPEAMENTO, TRADUÇÃO E MULTIINDEX DO LAYOUT
         # ==========================================================
