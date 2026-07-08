@@ -185,14 +185,30 @@ if not st.session_state.logado:
     st.stop()
 
 
-# --- 4. BARRA LATERAL E LOGOUT ---
-with st.sidebar:
-    st.write(f"👤 Conectado como: **{st.session_state.usuario_atual}**")
-    st.divider()
-    if st.button("🚪 Sair do Sistema", use_container_width=True, key="btn_logout_sidebar_definitivo"):
-        st.session_state.logado = False
-        st.query_params.clear() # Deleta a chave da URL ao deslogar por segurança
-        st.rerun()
+# ==========================================================
+# --- 4. BARRA LATERAL E LOGOUT (CORRIGIDO ANTI-DUPLICIDADE) ---
+# ==========================================================
+# 🚨 TRAVA CRÍTICA: Só desenha o menu lateral e o botão de logout se o usuário 
+# estiver de fato autenticado E se a página atual executada for a principal (app.py)
+if st.session_state.logado and pg.current_path == "app.py":
+    with st.sidebar:
+        st.write(f"👤 Conectado como: **{st.session_state.usuario_atual}**")
+        st.divider()
+        if st.button("🚪 Sair do Sistema", use_container_width=True, key="btn_logout_sidebar_definitivo"):
+            st.session_state.logado = False
+            st.query_params.clear()
+            st.rerun()
 
-# Executa as páginas normais do sistema de forma limpa
-pg.run()
+
+# ==========================================================
+# --- 5. RENDERIZAÇÃO INTELIGENTE DO CONTEÚDO ---
+# ==========================================================
+if pg.current_path == "app.py":
+    # Se estiver na home e logado, renderiza o conteúdo do painel
+    if st.session_state.logado:
+        renderizar_painel_principal()
+else:
+    # Se o usuário clicar em qualquer outra aba do menu (como Approvo Status),
+    # o st.navigation assume o controle e roda o respectivo arquivo de forma nativa e limpa,
+    # impedindo que o código do app.py se repita e duplique chaves.
+    pg.run()
