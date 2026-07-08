@@ -88,7 +88,8 @@ if arquivo_postado is not None:
             
             # Formatação de Data Nativa para o Formato ISO do PostgreSQL (YYYY-MM-DD)
             df_filtrado["data_emissao"] = pd.to_datetime(df_filtrado["data_emissao"], errors="coerce").dt.strftime("%Y-%m-%d")
-
+            df_filtrado["data_necessidade"] = pd.to_datetime(df_filtrado["data_necessidade"], errors="coerce").dt.strftime("%Y-%m-%d")
+            
             # 5. Descarte de duplicidades idênticas em memória
             total_antes = len(df_filtrado)
             df_filtrado = df_filtrado.drop_duplicates()
@@ -99,7 +100,11 @@ if arquivo_postado is not None:
 
             # Converte a matriz tratada em dicionário estruturado JSON
             dados_formatados = df_filtrado.to_dict(orient="records")
+            
+            for registro in dados_formatados[:5]:
+                st.json(registro)
 
+            
             if not dados_formatados:
                 st.error("⚠️ O processo de higienização resultou em zero linhas válidas.")
                 st.stop()
