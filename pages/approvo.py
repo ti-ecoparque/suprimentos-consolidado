@@ -3,7 +3,9 @@ import pandas as pd
 import os
 from supabase import create_client
 
-# 1. TRAVA DE SEGURANÇA E AUTO-LOGIN NATIVO (À PROVA DE F5)
+# ==========================================================
+# 🔒 1. TRAVA DE SEGURANÇA E AUTO-LOGIN NATIVO (À PROVA DE F5)
+# ==========================================================
 if "logado" not in st.session_state or not st.session_state.logado:
     usuario_url = st.query_params.get("u")
     if usuario_url:
@@ -15,12 +17,16 @@ if "logado" not in st.session_state or not st.session_state.logado:
             st.switch_page("app.py")
         st.stop()
 
-# 2. RENDERIZAÇÃO DA INTERFACE
+# ==========================================================
+# 📊 2. CONFIGURAÇÃO DA INTERFACE VISUAL
+# ==========================================================
 st.subheader("✅ Approvo Status")
 st.write("Visão ponta a ponta independente: Filtre por qualquer campo para consultar a árvore logística.")
 st.divider()
 
-# 3. INICIALIZAÇÃO DO BANCO DE DADOS
+# ==========================================================
+# 💾 3. INICIALIZAÇÃO SEGURA DO BANCO DE DADOS
+# ==========================================================
 SUPABASE_URL = os.getenv("SUPABASE_URL") or st.secrets.get("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY") or st.secrets.get("SUPABASE_KEY")
 
@@ -31,7 +37,29 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # ==========================================================
-# 🚀 4. CONSTRUÇÃO DA QUERY INTELIGENTE E INDEPENDENTE (CORRIGIDO)
+# 🛠️ 4. INTERFACE GRÁFICA DOS FILTROS INDEPENDENTES (NOMES SINCRONIZADOS)
+# ==========================================================
+st.markdown("#### 🔍 Painel de Filtros Globais")
+
+col_f1, col_f2, col_f3 = st.columns(3)
+col_f4, col_f5, col_f6 = st.columns(3)
+
+with col_f1:
+    buscar_rm = st.text_input("Filtrar por Número da RM:", "").strip()
+with col_f2:
+    buscar_req = st.text_input("Filtrar por Nome do Requisitante:", "").strip()
+with col_f3:
+    buscar_comp = st.text_input("Filtrar por Nome do Comprador:", "").strip()
+    
+with col_f4:
+    filtro_status_rm = st.selectbox("Status da RM:", ["Todos", "Aprovado", "Em Aprovação", "Reprovado"])
+with col_f5:
+    filtro_status_pc = st.selectbox("Status do PC:", ["Todos", "Aprovado", "Em Aprovação", "Reprovado"])
+with col_f6:
+    filtro_periodo = st.date_input("Intervalo (Data da Requisição):", value=[], format="DD/MM/YYYY")
+
+# ==========================================================
+# 🚀 5. TRAVA DE VALIDAÇÃO DE FILTROS SELECIONADOS
 # ==========================================================
 tem_filtro_ativo = buscar_rm or buscar_req or buscar_comp or filtro_status_rm != "Todos" or filtro_status_pc != "Todos" or len(filtro_periodo) == 2
 
@@ -39,9 +67,12 @@ if not tem_filtro_ativo:
     st.info("💡 Selecione qualquer filtro acima ou digite uma RM para carregar os dados consolidados.")
     st.stop()
 
+# ==========================================================
+# 🚀 6. CONSTRUÇÃO DA QUERY INTELIGENTE E INDEPENDENTE
+# ==========================================================
 with st.spinner("Buscando e cruzando visões comerciais..."):
     try:
-        # 📐 A. QUERY NA VIEW DE REQUISIÇÕES (RM)
+        # A. Consulta na visão de Requisições de Material (RM)
         query_rm = supabase.table("vw_approvo_rm").select("*")
         
         if buscar_rm:
@@ -59,7 +90,7 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             st.warning("⚠️ Nenhum registro de RM localizado para os filtros aplicados.")
             st.stop()
 
-        # Extrai a lista de RMs de forma segura contra floats/nulos
+        # Extrai a lista de RMs localizadas de forma limpa e segura
         lista_rms_encontradas = []
         if "rm" in df_rm_bruto.columns:
             for r in df_rm_bruto["rm"].unique():
@@ -69,11 +100,12 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         df_vinculo = pd.DataFrame()
         df_pc_bruto = pd.DataFrame()
 
-        # 📐 B. QUERY NA TABELA DE VÍNCULO PEDIDO_COMPRA
+        # B. Consulta na tabela de vínculo físico pedido_compra
         if lista_rms_encontradas:
             res_vinculo = supabase.table("pedido_compra").select("rm", "pedido").in_("rm", lista_rms_encontradas).execute()
             df_vinculo = pd.DataFrame(res_vinculo.data)
 
+        # C. Consulta na visão de Pedidos de Compra (PC)
         if not df_vinculo.empty:
             lista_pedidos = []
             for p in df_vinculo["pedido"].unique():
@@ -81,7 +113,6 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                     lista_pedidos.append(str(int(float(p))))
             
             if lista_pedidos:
-                # 📐 C. QUERY NA VIEW DE PEDIDOS (PC)
                 query_pc = supabase.table("vw_approvo_pc").select("*").in_("pedido", lista_pedidos)
                 
                 if buscar_comp:
@@ -93,14 +124,13 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                 res_pc = query_pc.execute()
                 df_pc_bruto = pd.DataFrame(res_pc.data)
                 
+                # Remove a coluna JSONB na raiz para impedir o erro 'unhashable type'
                 if "entregas_agendadas" in df_pc_bruto.columns:
                     df_pc_bruto.drop(columns=["entregas_agendadas"], inplace=True)
 
+                # ==========================================================
+        # 🔄 7. LOGÍSTICA DE UNIFICAÇÃO (MERGE) E TRATAMENTO DE TEXTO
         # ==========================================================
-        # 🔄 5. LOGÍSTICA DE UNIFICAÇÃO (MERGE) E ANTIDUPLICIDADE (BLINDADO)
-        # ==========================================================
-        # 🚨 SOLUÇÃO REAL CONTRA O ERRO 'upper': Forçamos o tratamento de nulos usando .astype(str) 
-        # substituindo NaNs por strings antes de aplicar qualquer tratamento de texto
         if "rm" in df_rm_bruto.columns:
             df_rm_bruto["rm_str"] = df_rm_bruto["rm"].fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
         else:
@@ -148,69 +178,28 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             for col in ["comprador", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"]:
                 df_final[col] = None
 
+        # Trava rígida antiduplicidade por item
         if "mat" in df_final.columns and "rm" in df_final.columns:
             df_final = df_final.drop_duplicates(subset=["rm", "mat"]).copy()
         else:
             df_final = df_final.drop_duplicates().copy()
 
+        # Filtro de intervalo de período individualizado contra listas
         if len(filtro_periodo) == 2:
-            # Extrai os dois objetos de data de dentro da lista de forma individual e segura
             data_inicio = pd.to_datetime(filtro_periodo[0])
             data_fim = pd.to_datetime(filtro_periodo[1])
-            
-            # Garante que a coluna de data do banco seja convertida para formato Datetime do Pandas
             df_final["data_emissao_dt"] = pd.to_datetime(df_final["data_emissao"], errors="coerce")
-            
-            # Executa o filtro de intervalo de forma limpa e sem erros
             df_final = df_final[(df_final["data_emissao_dt"] >= data_inicio) & (df_final["data_emissao_dt"] <= data_fim)]
 
         if df_final.empty:
             st.warning("⚠️ Nenhum registro corresponde ao intervalo de datas selecionado.")
             st.stop()
 
-
-        # 7. MAPEAMENTO, TRADUÇÃO E FORMATAÇÃO VISUAL
-        mapa_status_extenso = {"A": "Aprovado", "E": "Em Aprovação", "R": "Reprovado", "---": "---"}
-        
-        if "status_documento" in df_final.columns:
-            df_final["status_documento"] = df_final["status_documento"].astype(str).str.strip().map(lambda x: mapa_status_extenso.get(x.upper(), x))
-        if "status_pc" in df_final.columns:
-            df_final["status_pc"] = df_final["status_pc"].astype(str).str.strip().map(lambda x: mapa_status_extenso.get(x.upper(), x))
-
-        if "qtd_solicitada" in df_final.columns:
-            df_final["qtd_solicitada"] = pd.to_numeric(df_final["qtd_solicitada"], errors="coerce").fillna(0).astype(int)
-        if "quantidade_comprada" in df_final.columns:
-            df_final["quantidade_comprada"] = pd.to_numeric(df_final["quantidade_comprada"], errors="coerce").fillna(0).astype(int)
-
-        for col in ["data_emissao", "data_necessidade", "entrega"]:
-            if col in df_final.columns:
-                df_final[col] = pd.to_datetime(df_final[col], errors="coerce").dt.strftime("%d/%m/%Y")
-                
-        for col in ["data_ocorrencia", "data_ocorrencia_pc"]:
-            if col in df_final.columns:
-                df_final[col] = pd.to_datetime(df_final[col], errors="coerce").dt.strftime("%d/%m/%Y %H:%M")
-
-        df_final.fillna("---", inplace=True)
-        df_final.replace("nan", "---", inplace=True)
-
-        colunas_multi_index = {
-            "nome_solicitante":   ("REQUISICAO DE MATERIAL MEGA", "Requisitante"),
-            "rm":                 ("REQUISICAO DE MATERIAL MEGA", "Nr. RM"),
-            "mat":                ("REQUISICAO DE MATERIAL MEGA", "Nr. Material"),
-            "desc_item":          ("REQUISICAO DE MATERIAL MEGA", "Descrição"),
-            "qtd_solicitada":     ("REQUISICAO DE MATERIAL MEGA", "Qt. Sol."),
-            "data_emissao":       ("REQUISICAO DE MATERIAL MEGA", "Data da Requisição"),
-            "data_necessidade":   ("REQUISICAO DE MATERIAL MEGA", "Data da Nec."),
-        }    
-            
-                # ==========================================================
-        # 📊 7. MAPEAMENTO, TRADUÇÃO E FORMATAÇÃO VISUAL (BLINDADO)
         # ==========================================================
-        # Dicionário de tradução das siglas de Status da RM e do PC
+        # 📊 8. MAPEAMENTO, TRADUÇÃO E MULTIINDEX DO LAYOUT
+        # ==========================================================
         mapa_status_extenso = {"A": "Aprovado", "E": "Em Aprovação", "R": "Reprovado", "---": "---"}
         
-        # 🚨 SOLUÇÃO REAL CONTRA O ERRO DO 'upper': Usamos o .map com uma função segura que 
-        # verifica se o dado não é nulo antes de transformar o texto em maiúsculo
         if "status_documento" in df_final.columns:
             df_final["status_documento"] = df_final["status_documento"].map(
                 lambda x: mapa_status_extenso.get(str(x).strip().upper(), "---") if pd.notna(x) else "---"
@@ -220,27 +209,22 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                 lambda x: mapa_status_extenso.get(str(x).strip().upper(), "---") if pd.notna(x) else "---"
             )
 
-        # Limpa as casas decimais das colunas de quantidade do Mega (.000000 -> inteiro)
         if "qtd_solicitada" in df_final.columns:
             df_final["qtd_solicitada"] = pd.to_numeric(df_final["qtd_solicitada"], errors="coerce").fillna(0).astype(int)
         if "quantidade_comprada" in df_final.columns:
             df_final["quantidade_comprada"] = pd.to_numeric(df_final["quantidade_comprada"], errors="coerce").fillna(0).astype(int)
 
-        # Formatação de datas comuns para o padrão brasileiro (DD/MM/AAAA)
         for col in ["data_emissao", "data_necessidade", "entrega"]:
             if col in df_final.columns:
                 df_final[col] = pd.to_datetime(df_final[col], errors="coerce").dt.strftime("%d/%m/%Y")
                 
-        # Formatação de datas com hora para as ocorrências de auditoria do Approvo
         for col in ["data_ocorrencia", "data_ocorrencia_pc"]:
             if col in df_final.columns:
                 df_final[col] = pd.to_datetime(df_final[col], errors="coerce").dt.strftime("%d/%m/%Y %H:%M")
 
-        # Garante a limpeza completa de valores nulos ou vazios residuais no Pandas
         df_final.fillna("---", inplace=True)
         df_final.replace("nan", "---", inplace=True)
 
-        # Estrutura do Dicionário de MultiIndex (Super Cabeçalho Agrupado)
         colunas_multi_index = {
             "nome_solicitante":   ("REQUISICAO DE MATERIAL MEGA", "Requisitante"),
             "rm":                 ("REQUISICAO DE MATERIAL MEGA", "Nr. RM"),
@@ -264,19 +248,17 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             "nome_aprovador_pc":  ("APPROVAL (PC)", "Aprovador")
         }
 
-        # Filtra as colunas mapeadas existentes e gera o cabeçalho duplo agrupado
         colunas_existentes = [col for col in colunas_multi_index.keys() if col in df_final.columns]
         df_exibicao = df_final[colunas_existentes].copy()
         df_exibicao.columns = pd.MultiIndex.from_tuples([colunas_multi_index[c] for c in colunas_existentes])
 
         # ==========================================================
-        # 🎨 8. LAYOUT CROMÁTICO (CORREÇÃO DE APLICACAO DE CORES)
+        # 🎨 9. LAYOUT CROMÁTICO (PALETA PASTEL)
         # ==========================================================
         def aplicar_cores_corpo(df):
-            """Pinta as células do corpo com os tons suaves baseados no grupo pai"""
             estilos = pd.DataFrame('', index=df.index, columns=df.columns)
             for col in df.columns:
-                grupo = col[0] # 🚨 FIX DEFINITIVO: Acessa o índice [0] da tupla para ler o Super Cabeçalho Pai!
+                grupo = col[0]
                 if grupo == "REQUISICAO DE MATERIAL MEGA":
                     estilos[col] = 'background-color: #f2f7f2; color: #000000;'
                 elif grupo == "APPROVAL (RM)":
@@ -287,15 +269,9 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                     estilos[col] = 'background-color: #f3daf1; color: #000000;'
             return estilos
 
-        # Injeta o código CSS para colorir e destacar os títulos superiores do Streamlit
         st.markdown("""
             <style>
-                th.col_heading.level0 { 
-                    font-weight: bold !important; 
-                    color: #000000 !important; 
-                    text-align: center !important; 
-                }
-                /* Força a pintura do cabeçalho unificado pelas posições das colunas */
+                th.col_heading.level0 { font-weight: bold !important; color: #000000 !important; text-align: center !important; }
                 th.col_heading.level0.id0_6 { background-color: #e2f0d9 !important; }
                 th.col_heading.level0.id7_9 { background-color: #a9d08e !important; }
                 th.col_heading.level0.id10_13 { background-color: #f2dcfa !important; }
@@ -303,10 +279,8 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             </style>
         """, unsafe_allow_html=True)
 
-        # Renderiza a tabela finalizada na interface do Streamlit
         df_estilizado = df_exibicao.style.apply(aplicar_cores_corpo, axis=None)
         st.dataframe(df_estilizado, use_container_width=True, hide_index=True)
 
     except Exception as e:
         st.error(f"❌ Erro crítico ao consolidar as visões no Cenário D: {e}")
-
