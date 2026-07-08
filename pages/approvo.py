@@ -36,6 +36,23 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+try:
+    # Busca apenas a coluna de nomes de forma leve
+    res_nomes_req = supabase.table("vw_approvo_rm").select("nome_solicitante").execute()
+    
+    # Extrai os nomes eliminando duplicados e ignorando valores Nulos/Vazios
+    nomes_unicos = set()
+    for linha in res_nomes_req.data:
+        nome = linha.get("nome_solicitante")
+        if nome and pd.notna(nome) and str(nome).strip() != "" and str(nome).lower() != "nan":
+            nomes_unicos.add(str(nome).strip())
+            
+    opcoes_requisitas = ["Todos"] + sorted(list(nomes_unicos))
+except Exception:
+    opcoes_requisitas = ["Todos"]
+
+
+
 # ==========================================================
 # 🛠️ 4. INTERFACE GRÁFICA DOS FILTROS INDEPENDENTES (NOMES SINCRONIZADOS)
 # ==========================================================
@@ -47,7 +64,8 @@ col_f4, col_f5, col_f6 = st.columns(3)
 with col_f1:
     buscar_rm = st.text_input("Filtrar por Número da RM:", "").strip()
 with col_f2:
-    buscar_req = st.text_input("Filtrar por Nome do Requisitante:", "").strip()
+    # 🔥 MUDADO DE TEXT_INPUT PARA SELECTBOX: Lista os nomes reais salvos no Supabase
+    filtro_req = st.selectbox("Filtrar por Nome do Requisitante:", opcoes_requisitas)
 with col_f3:
     buscar_comp = st.text_input("Filtrar por Nome do Comprador:", "").strip()
     
@@ -61,7 +79,9 @@ with col_f6:
 # ==========================================================
 # 🚀 5. TRAVA DE VALIDAÇÃO DE FILTROS SELECIONADOS
 # ==========================================================
-tem_filtro_ativo = buscar_rm or buscar_req or buscar_comp or filtro_status_rm != "Todos" or filtro_status_pc != "Todos" or len(filtro_periodo) == 2
+#tem_filtro_ativo = buscar_rm or buscar_req or buscar_comp or filtro_status_rm != "Todos" or filtro_status_pc != "Todos" or len(filtro_periodo) == 2
+tem_filtro_ativo = buscar_rm or filtro_req != "Todos" or buscar_comp or filtro_status_rm != "Todos" or filtro_status_pc != "Todos" or len(filtro_periodo) == 2
+
 
 if not tem_filtro_ativo:
     st.info("💡 Selecione qualquer filtro acima ou digite uma RM para carregar os dados consolidados.")
