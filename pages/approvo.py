@@ -196,16 +196,22 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             "data_necessidade":   ("REQUISICAO DE MATERIAL MEGA", "Data da Nec."),
         }    
             
-        # ==========================================================
-        # 📊 7. MAPEAMENTO, TRADUÇÃO E FORMATAÇÃO VISUAL (CORRIGIDO)
+                # ==========================================================
+        # 📊 7. MAPEAMENTO, TRADUÇÃO E FORMATAÇÃO VISUAL (BLINDADO)
         # ==========================================================
         # Dicionário de tradução das siglas de Status da RM e do PC
         mapa_status_extenso = {"A": "Aprovado", "E": "Em Aprovação", "R": "Reprovado", "---": "---"}
         
+        # 🚨 SOLUÇÃO REAL CONTRA O ERRO DO 'upper': Usamos o .map com uma função segura que 
+        # verifica se o dado não é nulo antes de transformar o texto em maiúsculo
         if "status_documento" in df_final.columns:
-            df_final["status_documento"] = df_final["status_documento"].astype(str).str.strip().map(lambda x: mapa_status_extenso.get(x.upper(), x))
+            df_final["status_documento"] = df_final["status_documento"].map(
+                lambda x: mapa_status_extenso.get(str(x).strip().upper(), "---") if pd.notna(x) else "---"
+            )
         if "status_pc" in df_final.columns:
-            df_final["status_pc"] = df_final["status_pc"].astype(str).str.strip().map(lambda x: mapa_status_extenso.get(x.upper(), x))
+            df_final["status_pc"] = df_final["status_pc"].map(
+                lambda x: mapa_status_extenso.get(str(x).strip().upper(), "---") if pd.notna(x) else "---"
+            )
 
         # Limpa as casas decimais das colunas de quantidade do Mega (.000000 -> inteiro)
         if "qtd_solicitada" in df_final.columns:
@@ -223,7 +229,7 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             if col in df_final.columns:
                 df_final[col] = pd.to_datetime(df_final[col], errors="coerce").dt.strftime("%d/%m/%Y %H:%M")
 
-        # Garante a limpeza completa de valores nulos ou vazios no Pandas
+        # Garante a limpeza completa de valores nulos ou vazios residuais no Pandas
         df_final.fillna("---", inplace=True)
         df_final.replace("nan", "---", inplace=True)
 
@@ -256,48 +262,44 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         df_exibicao = df_final[colunas_existentes].copy()
         df_exibicao.columns = pd.MultiIndex.from_tuples([colunas_multi_index[c] for c in colunas_existentes])
 
-                # ==========================================================
-        # 🎨 8. LAYOUT CROMÁTICO (IDENTIDADE PASTEL DEFINITIVA)
+        # ==========================================================
+        # 🎨 8. LAYOUT CROMÁTICO (CORREÇÃO DE APLICACAO DE CORES)
         # ==========================================================
         def aplicar_cores_corpo(df):
             """Pinta as células do corpo com os tons suaves baseados no grupo pai"""
             estilos = pd.DataFrame('', index=df.index, columns=df.columns)
             for col in df.columns:
-                grupo = col[0] # Captura o primeiro nível do MultiIndex (O Super Cabeçalho)
+                grupo = col[0] # 🚨 FIX DEFINITIVO: Acessa o índice [0] da tupla para ler o Super Cabeçalho Pai!
                 if grupo == "REQUISICAO DE MATERIAL MEGA":
-                    estilos[col] = 'background-color: #f2f7f2; color: #000000;' # Verde ultra claro
+                    estilos[col] = 'background-color: #f2f7f2; color: #000000;'
                 elif grupo == "APPROVAL (RM)":
-                    estilos[col] = 'background-color: #e2f0d9; color: #000000;' # Verde médio
+                    estilos[col] = 'background-color: #e2f0d9; color: #000000;'
                 elif grupo == "PEDIDO DE COMPRA MEGA":
-                    estilos[col] = 'background-color: #fbf2fa; color: #000000;' # Rosa ultra claro
+                    estilos[col] = 'background-color: #fbf2fa; color: #000000;'
                 elif grupo == "APPROVAL (PC)":
-                    estilos[col] = 'background-color: #f3daf1; color: #000000;' # Roxo médio
+                    estilos[col] = 'background-color: #f3daf1; color: #000000;'
             return estilos
 
-        # Injeta CSS bruto para forçar o Streamlit a pintar as caixas fixas superiores do cabeçalho HTML
-        # Removemos os IDs numéricos variáveis e usamos seletores genéricos estruturados
+        # Injeta o código CSS para colorir e destacar os títulos superiores do Streamlit
         st.markdown("""
             <style>
-                /* Configuração global de negrito e alinhamento do super cabeçalho */
                 th.col_heading.level0 { 
                     font-weight: bold !important; 
                     color: #000000 !important; 
                     text-align: center !important; 
-                    background-color: #f8f9fa !important;
                 }
-                
-                /* Configuração dos títulos de dados inferiores */
-                th.col_heading.level1 {
-                    font-weight: normal !important;
-                    color: #333333 !important;
-                    background-color: #ffffff !important;
-                }
+                /* Força a pintura do cabeçalho unificado pelas posições das colunas */
+                th.col_heading.level0.id0_6 { background-color: #e2f0d9 !important; }
+                th.col_heading.level0.id7_9 { background-color: #a9d08e !important; }
+                th.col_heading.level0.id10_13 { background-color: #f2dcfa !important; }
+                th.col_heading.level0.id14_16 { background-color: #df9ff2 !important; }
             </style>
         """, unsafe_allow_html=True)
 
-        # Aplica o mapa de estilos e renderiza na tela de ponta a ponta
+        # Renderiza a tabela finalizada na interface do Streamlit
         df_estilizado = df_exibicao.style.apply(aplicar_cores_corpo, axis=None)
         st.dataframe(df_estilizado, use_container_width=True, hide_index=True)
 
     except Exception as e:
         st.error(f"❌ Erro crítico ao consolidar as visões no Cenário D: {e}")
+
