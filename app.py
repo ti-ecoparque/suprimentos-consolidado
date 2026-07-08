@@ -128,27 +128,25 @@ def renderizar_painel_principal():
 # ==========================================================
 # --- 2. CONFIGURAÇÃO DE NAVEGAÇÃO E SUCESSO DO MENU ---
 # ==========================================================
-pagina_painel = st.Page("app.py", title="Painel Principal", icon="📊", default=True)
+# Mudamos o Painel Principal para ler a própria lógica nativa do arquivo
+pagina_painel = st.Page(renderizar_painel_principal, title="Painel Principal", icon="📊", default=True)
 pagina_pedido = st.Page("pages/le_rel_pedido_compra.py", title="Pedidos de Compra", icon="📦")
 pagina_solicitacao = st.Page("pages/le_rel_sol_compra.py", title="Solicitações de Compra", icon="📥")
 pagina_lepdf = st.Page("pages/lepdf.py", title="Integrador LePDF", icon="📂")
-
-# 🚨 AJUSTADO: Aponta para a pasta e o nome correto do arquivo que você criou!
 pagina_approvo = st.Page("pages/approvo.py", title="Approvo Status", icon="✅")
 
-# Declara a lista de navegação unificada e padronizada por arquivos
+# Declara a estrutura do menu lateral integrada
 pg = st.navigation([pagina_painel, pagina_pedido, pagina_solicitacao, pagina_lepdf, pagina_approvo])
 
 
-
+# ==========================================================
 # --- 3. SISTEMA DE AUTO-LOGIN SEGURO NATIVO (À PROVA DE F5) ---
+# ==========================================================
 if "logado" not in st.session_state:
     st.session_state.logado = False
 
-# O Streamlit guarda parâmetros nativamente na URL da aba ativa. 
-# Se der F5, o Python lê essa chave e loga sozinho, sem quebrar ou dar delay!
 if not st.session_state.logado:
-    usuario_salvo = st.query_params.get("u") # Lê o parâmetro 'u' da URL
+    usuario_salvo = st.query_params.get("u")
     if usuario_salvo:
         lista_usuarios = st.secrets["usuarios"]
         if usuario_salvo in lista_usuarios:
@@ -161,16 +159,13 @@ def realizar_login(email_input, senha_input, lembrar_usuario):
     if email_input in lista_usuarios and lista_usuarios[email_input] == senha_input:
         st.session_state.logado = True
         st.session_state.usuario_atual = email_input
-        
         if lembrar_usuario:
-            # Grava na URL de forma estável. Resiste a F5 e atualizações!
             st.query_params["u"] = email_input
-            
         st.rerun()
     else:
         st.error("E-mail ou senha incorretos. Tente novamente.")
 
-# Bloqueio de Acesso Restrito
+# Bloqueio de Acesso Restrito Corporativo
 if not st.session_state.logado:
     st.markdown("<h2 style='text-align: center;'>🔒 Acesso Restrito - Suprimentos</h2>", unsafe_allow_html=True)
     with st.form("form_login", clear_on_submit=False):
@@ -178,35 +173,29 @@ if not st.session_state.logado:
         email_usuario = st.text_input("E-mail")
         senha_usuario = st.text_input("Senha", type="password")
         lembrar = st.checkbox("Manter-me conectado neste computador (Salvar sessão)")
-        botao_entrar = st.form_submit_button("Entrar no Painel")
+        botao_entrar = st.form_submit_button("Entrar no Panel")
         if botao_entrar:
             realizar_login(email_usuario, senha_usuario, lembrar)
-            
     st.stop()
 
 
 # ==========================================================
-# --- 4. BARRA LATERAL E LOGOUT (CORRIGIDO DEFINITIVO) ---
+# --- 4. BARRA LATERAL E LOGOUT NATIVO ---
 # ==========================================================
-# 🚨 SOLUÇÃO REAL: Compara o objeto da página atual diretamente com a instância 
-# da página criada no st.Page, o que funciona em qualquer servidor sem depender de caminhos de texto!
-if st.session_state.logado and pg.current_page == pagina_painel:
-    with st.sidebar:
-        st.write(f"👤 Conectado como: **{st.session_state.usuario_atual}**")
-        st.divider()
-        if st.button("🚪 Sair do Sistema", use_container_width=True, key="btn_logout_sidebar_definitivo"):
-            st.session_state.logado = False
-            st.query_params.clear()
-            st.rerun()
+# Criamos a barra lateral e o botão de logout dentro do escopo do st.sidebar.
+# O Streamlit gerencia isso e mantém o botão visível em todas as páginas automaticamente.
+with st.sidebar:
+    st.write(f"👤 Conectado como: **{st.session_state.usuario_atual}**")
+    st.divider()
+    if st.button("🚪 Sair do Sistema", use_container_width=True, key="btn_logout_sidebar_definitivo"):
+        st.session_state.logado = False
+        st.query_params.clear()
+        st.rerun()
 
 
 # ==========================================================
-# --- 5. RENDERIZAÇÃO INTELIGENTE DO CONTEÚDO ---
+# --- 5. EXECUÇÃO ORQUESTREDA (ÚNICO COMANDO) ---
 # ==========================================================
-if pg.current_page == pagina_painel:
-    if st.session_state.logado:
-        renderizar_painel_principal()
-else:
-    # Se o operador clicar em qualquer outra aba do menu (como Approvo Status),
-    # o st.navigation assume o controle e roda o respectivo arquivo de forma nativa e limpa.
-    pg.run()
+# Removemos todos os if/else complexos e deixamos o pg.run() reinar sozinho.
+# Ele vai renderizar as subpáginas e a Home na área central sem loops circulares.
+pg.run()
