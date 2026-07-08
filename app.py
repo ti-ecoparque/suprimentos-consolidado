@@ -186,10 +186,11 @@ if not st.session_state.logado:
 
 
 # ==========================================================
-# --- 4. BARRA LATERAL E LOGOUT (CORRIGIDO) ---
+# --- 4. BARRA LATERAL E LOGOUT (CORRIGIDO DEFINITIVO) ---
 # ==========================================================
-# 🚨 AJUSTE DE ATRIBUTO: Mudado de pg.current_path para pg.current_page.path
-if st.session_state.logado and pg.current_page.path == "app.py":
+# 🚨 SOLUÇÃO REAL: Compara o objeto da página atual diretamente com a instância 
+# da página criada no st.Page, o que funciona em qualquer servidor sem depender de caminhos de texto!
+if st.session_state.logado and pg.current_page == pagina_painel:
     with st.sidebar:
         st.write(f"👤 Conectado como: **{st.session_state.usuario_atual}**")
         st.divider()
@@ -202,11 +203,10 @@ if st.session_state.logado and pg.current_page.path == "app.py":
 # ==========================================================
 # --- 5. RENDERIZAÇÃO INTELIGENTE DO CONTEÚDO ---
 # ==========================================================
-# 🚨 AJUSTE DE ATRIBUTO: Mudado de pg.current_path para pg.current_page.path
-if pg.current_page.path == "app.py":
+if pg.current_page == pagina_painel:
     if st.session_state.logado:
         renderizar_painel_principal()
 else:
-    # Se o usuário estiver em qualquer outra página (como pages/approvo.py),
-    # o Streamlit roda o arquivo correspondente de forma nativa e isolada.
+    # Se o operador clicar em qualquer outra aba do menu (como Approvo Status),
+    # o st.navigation assume o controle e roda o respectivo arquivo de forma nativa e limpa.
     pg.run()
