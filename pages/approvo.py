@@ -53,11 +53,11 @@ except Exception:
 
 try:
     # Busca apenas a coluna comprador da view de pedidos
-    res_nomes_comp = supabase.table("vw_approvo_pc").select("comprador").execute()
+    res_nomes_comp = supabase.table("vw_approvo_pc").select("nome_solicitante").execute()
     
     compradores_unicos = set()
     for linha in res_nomes_comp.data:
-        comp = linha.get("comprador")
+        comp = linha.get("nome_solicitante")
         # Se for nulo, nan ou vazio, ignora para não poluir o selectbox
         if comp and pd.notna(comp) and str(comp).strip() != "" and str(comp).lower() != "nan":
             compradores_unicos.add(str(comp).strip())
@@ -154,7 +154,7 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                 
                 # 🚨 Trecho atualizado e sincronizado com o Selectbox de Compradores
                 if filtro_comp != "Todos":
-                    query_pc = query_pc.eq("comprador", filtro_comp)
+                    query_pc = query_pc.eq("nome_solicitante", filtro_comp)
                     
                 if filtro_status_pc != "Todos":
                     mapa_invertido = {"Aprovado": "A", "Em Aprovação": "E", "Reprovado": "R"}
@@ -194,11 +194,12 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                 df_pc_bruto["pedido_str"] = df_pc_bruto["pedido"].fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
                 df_pc_bruto["mat_str"] = df_pc_bruto["mat"].fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
                 
-                colunas_vitais_pc = ["pedido_str", "mat_str", "comprador", "entrega", "quantidade", "status_documento", "data_ocorrencia", "nome_aprovador"]
+                colunas_vitais_pc = ["pedido_str", "mat_str", "nome_solicitante", "entrega", "quantidade", "status_documento", "data_ocorrencia", "nome_aprovador"]
                 colunas_existentes_pc = [c for c in colunas_vitais_pc if c in df_pc_bruto.columns]
                 df_pc_limpo = df_pc_bruto[colunas_existentes_pc].drop_duplicates().copy()
                 
                 df_pc_limpo.rename(columns={
+                    "nome_solicitante": "comprador",
                     "status_documento": "status_pc",
                     "data_oficial_ocorrencia": "data_ocorrencia_pc",
                     "data_ocorrencia": "data_ocorrencia_pc",
