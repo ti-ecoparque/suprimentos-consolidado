@@ -256,36 +256,46 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         df_exibicao = df_final[colunas_existentes].copy()
         df_exibicao.columns = pd.MultiIndex.from_tuples([colunas_multi_index[c] for c in colunas_existentes])
 
-        # ==========================================================
-        # 🎨 8. LAYOUT CROMÁTICO (IDENTIDADE PASTEL)
+                # ==========================================================
+        # 🎨 8. LAYOUT CROMÁTICO (IDENTIDADE PASTEL DEFINITIVA)
         # ==========================================================
         def aplicar_cores_corpo(df):
             """Pinta as células do corpo com os tons suaves baseados no grupo pai"""
             estilos = pd.DataFrame('', index=df.index, columns=df.columns)
             for col in df.columns:
-                grupo = col
+                grupo = col[0] # Captura o primeiro nível do MultiIndex (O Super Cabeçalho)
                 if grupo == "REQUISICAO DE MATERIAL MEGA":
-                    estilos[col] = 'background-color: #f2f7f2; color: #000000;'
+                    estilos[col] = 'background-color: #f2f7f2; color: #000000;' # Verde ultra claro
                 elif grupo == "APPROVAL (RM)":
-                    estilos[col] = 'background-color: #e2f0d9; color: #000000;'
+                    estilos[col] = 'background-color: #e2f0d9; color: #000000;' # Verde médio
                 elif grupo == "PEDIDO DE COMPRA MEGA":
-                    estilos[col] = 'background-color: #fbf2fa; color: #000000;'
+                    estilos[col] = 'background-color: #fbf2fa; color: #000000;' # Rosa ultra claro
                 elif grupo == "APPROVAL (PC)":
-                    estilos[col] = 'background-color: #f3daf1; color: #000000;'
+                    estilos[col] = 'background-color: #f3daf1; color: #000000;' # Roxo médio
             return estilos
 
-        # Injeta o código CSS para colorir os blocos superiores do cabeçalho HTML do Streamlit
+        # Injeta CSS bruto para forçar o Streamlit a pintar as caixas fixas superiores do cabeçalho HTML
+        # Removemos os IDs numéricos variáveis e usamos seletores genéricos estruturados
         st.markdown("""
             <style>
-                th.col_heading.level0 { font-weight: bold !important; color: #000000 !important; text-align: center !important; }
-                th.col_heading.level0.id0_6 { background-color: #e2f0d9 !important; }
-                th.col_heading.level0.id7_9 { background-color: #a9d08e !important; }
-                th.col_heading.level0.id10_13 { background-color: #f2dcfa !important; }
-                th.col_heading.level0.id14_16 { background-color: #df9ff2 !important; }
+                /* Configuração global de negrito e alinhamento do super cabeçalho */
+                th.col_heading.level0 { 
+                    font-weight: bold !important; 
+                    color: #000000 !important; 
+                    text-align: center !important; 
+                    background-color: #f8f9fa !important;
+                }
+                
+                /* Configuração dos títulos de dados inferiores */
+                th.col_heading.level1 {
+                    font-weight: normal !important;
+                    color: #333333 !important;
+                    background-color: #ffffff !important;
+                }
             </style>
         """, unsafe_allow_html=True)
 
-        # Renderiza a tabela finalizada na interface do Streamlit
+        # Aplica o mapa de estilos e renderiza na tela de ponta a ponta
         df_estilizado = df_exibicao.style.apply(aplicar_cores_corpo, axis=None)
         st.dataframe(df_estilizado, use_container_width=True, hide_index=True)
 
