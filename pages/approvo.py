@@ -79,7 +79,7 @@ with col_f6:
 # ==========================================================
 # 🚀 5. TRAVA DE VALIDAÇÃO DE FILTROS SELECIONADOS
 # ==========================================================
-#tem_filtro_ativo = buscar_rm or buscar_req or buscar_comp or filtro_status_rm != "Todos" or filtro_status_pc != "Todos" or len(filtro_periodo) == 2
+# 🚨 SUBSTITUA A LINHA DA TRAVA POR ESTA:
 tem_filtro_ativo = buscar_rm or filtro_req != "Todos" or buscar_comp or filtro_status_rm != "Todos" or filtro_status_pc != "Todos" or len(filtro_periodo) == 2
 
 
@@ -97,8 +97,11 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         
         if buscar_rm:
             query_rm = query_rm.eq("rm", str(buscar_rm))
-        if buscar_req:
-            query_rm = query_rm.ilike("nome_solicitante", f"%{buscar_req}%")
+            
+        # 🚨 Bloqueio corrigido e sincronizado com o Selectbox
+        if filtro_req != "Todos":
+            query_rm = query_rm.eq("nome_solicitante", filtro_req)
+            
         if filtro_status_rm != "Todos":
             mapa_invertido = {"Aprovado": "A", "Em Aprovação": "E", "Reprovado": "R"}
             query_rm = query_rm.eq("status_documento", mapa_invertido[filtro_status_rm])
