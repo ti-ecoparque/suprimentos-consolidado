@@ -395,7 +395,7 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                     # Regras fixas de destaque se a linha não estiver em atraso
                     if not tem_atraso:
                         if grupo == "SITUAÇÃO DO ITEM":
-                            estilos.at[i, col] = 'background-color: #70ad47; color: #ffffff; font-weight: bold; text-align: center;'
+                            estilos.at[i, col] = 'background-color: #c6e0b4; color: #000000; font-weight: bold; text-align: center;'
                         elif grupo == "ALERTA DE DATA":
                             estilos.at[i, col] = 'background-color: #fff2cc; color: #000000; text-align: center;'
             return estilos
