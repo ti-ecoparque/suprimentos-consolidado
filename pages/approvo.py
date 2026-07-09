@@ -167,7 +167,7 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                 if "entregas_agendadas" in df_pc_bruto.columns:
                     df_pc_bruto.drop(columns=["entregas_agendadas"], inplace=True)
 
-        # ==========================================================
+                # ==========================================================
         # 🔄 7. LOGÍSTICA DE UNIFICAÇÃO (MERGE) E TRATAMENTO DE TEXTO (SEGURO)
         # ==========================================================
         if "rm" in df_rm_bruto.columns:
@@ -180,7 +180,8 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         else:
             df_rm_bruto["mat_str"] = ""
             
-        colunas_vitais_rm = ["nome_solicitante", "rm", "mat", "desc_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "rm_str", "mat_str"]
+        # 🚨 ADICIONADO: 'sit_item' nas colunas vitais da RM
+        colunas_vitais_rm = ["nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "rm_str", "mat_str"]
         colunas_existentes_rm = [c for c in colunas_vitais_rm if c in df_rm_bruto.columns]
         df_rm_limpo = df_rm_bruto[colunas_existentes_rm].drop_duplicates().copy()
         
@@ -246,6 +247,38 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             df_final = df_final.drop_duplicates(subset=["rm", "mat"]).copy()
         else:
             df_final = df_final.drop_duplicates().copy()
+
+        # Filtro de intervalo de período blindado individualmente contra listas
+        if len(filtro_periodo) == 2:
+            data_inicio = pd.to_datetime(filtro_periodo)
+            data_fim = pd.to_datetime(filtro_periodo)
+            df_final["data_emissao_dt"] = pd.to_datetime(df_final["data_emissao"], errors="coerce")
+            df_final = df_final[(df_final["data_emissao_dt"] >= data_inicio) & (df_final["data_emissao_dt"] <= data_fim)]
+
+        if df_final.empty:
+            st.warning("⚠️ Nenhum registro corresponde ao intervalo de datas selecionado.")
+            st.stop()
+
+        # ==========================================================
+        # 🚨 ADICIONADO: 7.5 CÁLCULO LOGÍSTICO DO ALERTA DE DATA (ATRASO)
+        # ==========================================================
+        def calcular_atraso(row):
+            if pd.isna(row.get("entrega")) or pd.isna(row.get("data_necessidade")):
+                return "---"
+            try:
+                dt_entrega = pd.to_datetime(row["entrega"], errors="coerce")
+                dt_necessidade = pd.to_datetime(row["data_necessidade"], errors="coerce")
+                if pd.notna(dt_entrega) and pd.notna(dt_necessidade):
+                    diferenca = (dt_entrega - dt_necessidade).days
+                    if diferenca > 0:
+                        return f"Atraso de {diferenca} dias"
+                return "No prazo"
+            except Exception:
+                return "---"
+
+        # Executa o cálculo linha por linha antes de formatar as datas como string
+        df_final["alerta_data"] = df_final.apply(calcular_atraso, axis=1)
+
         # ==========================================================
         # 📊 8. MAPEAMENTO, TRADUÇÃO E MULTIINDEX DO LAYOUT
         # ==========================================================
@@ -265,6 +298,10 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         if "quantidade_comprada" in df_final.columns:
             df_final["quantidade_comprada"] = pd.to_numeric(df_final["quantidade_comprada"], errors="coerce").fillna(0).astype(int)
 
+        # Mantém uma cópia limpa das datas para a regra de colorização condicional da linha mais abaixo
+        df_final["entrega_original_dt"] = pd.to_datetime(df_final["entrega"], errors="coerce")
+        df_final["necessidade_original_dt"] = pd.to_datetime(df_final["data_necessidade"], errors="coerce")
+
         for col in ["data_emissao", "data_necessidade", "entrega"]:
             if col in df_final.columns:
                 df_final[col] = pd.to_datetime(df_final[col], errors="coerce").dt.strftime("%d/%m/%Y")
@@ -276,6 +313,7 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         df_final.fillna("---", inplace=True)
         df_final.replace("nan", "---", inplace=True)
 
+        # Estrutura do Dicionário de MultiIndex (Super Cabeçalho Agrupado)
         colunas_multi_index = {
             "nome_solicitante":   ("REQUISICAO DE MATERIAL MEGA", "Requisitante"),
             "rm":                 ("REQUISICAO DE MATERIAL MEGA", "Nr. RM"),
@@ -296,7 +334,12 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             
             "status_pc":          ("APPROVAL (PC)", "Status da Aprovação"),
             "data_ocorrencia_pc": ("APPROVAL (PC)", "Data da Aprovação"),
-            "nome_aprovador_pc":  ("APPROVAL (PC)", "Aprovador")
+            "nome_aprovador_pc":  ("APPROVAL (PC)", "Aprovador"),
+            
+            # 🚨 NOVAS COLUNAS INTEGRADAS OPERACIONAIS
+            "sit_item":           ("SITUAÇÃO DO ITEM", "Situação"),
+            "alerta_data":        ("ALERTA DE DATA", "Alerta de Entrega")
+            
         }
 
         colunas_existentes = [col for col in colunas_multi_index.keys() if col in df_final.columns]
@@ -304,32 +347,60 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         df_exibicao.columns = pd.MultiIndex.from_tuples([colunas_multi_index[c] for c in colunas_existentes])
 
         # ==========================================================
-        # 🎨 9. LAYOUT CROMÁTICO (PALETA PASTEL)
+        # 🎨 9. LAYOUT CROMÁTICO (PALETA PASTEL E ADICIONAIS)
         # ==========================================================
         def aplicar_cores_corpo(df):
+            # Inicializa uma planilha de estilos em branco
             estilos = pd.DataFrame('', index=df.index, columns=df.columns)
-            for col in df.columns:
-                grupo = col[0]
-                if grupo == "REQUISICAO DE MATERIAL MEGA":
-                    estilos[col] = 'background-color: #f2f7f2; color: #000000;'
-                elif grupo == "APPROVAL (RM)":
-                    estilos[col] = 'background-color: #e2f0d9; color: #000000;'
-                elif grupo == "PEDIDO DE COMPRA MEGA":
-                    estilos[col] = 'background-color: #fbf2fa; color: #000000;'
-                elif grupo == "APPROVAL (PC)":
-                    estilos[col] = 'background-color: #f3daf1; color: #000000;'
+            
+            # Varia célula por célula para aplicar as novas regras executivas
+            for idx in df.index:
+                # 🚨 VERIFICA SE HÁ ATRASO PARA PINTAR A LINHA DE VERMELHO SUAVE
+                dt_ent = df_final.loc[idx, "entrega_original_dt"]
+                dt_nec = df_final.loc[idx, "necessidade_original_dt"]
+                tem_atraso = pd.notna(dt_ent) and pd.notna(dt_nec) and (dt_ent > dt_nec)
+                
+                for col in df.columns:
+                    grupo = col[0] # Nível 0 do MultiIndex (Super Cabeçalho)
+                    
+                    if tem_atraso:
+                        # Se houver atraso, força o fundo em Vermelho Pastel Suave para a linha inteira
+                        estilos.at[idx, col] = 'background-color: #fce4d6; color: #000000;'
+                    else:
+                        # Se estiver no prazo, segue o degradê original do seu print
+                        if grupo == "REQUISICAO DE MATERIAL MEGA":
+                            estilos.at[idx, col] = 'background-color: #f2f7f2; color: #000000;'
+                        elif grupo == "APPROVAL (RM)":
+                            estilos.at[idx, col] = 'background-color: #e2f0d9; color: #000000;'
+                        elif grupo == "PEDIDO DE COMPRA MEGA":
+                            estilos.at[idx, col] = 'background-color: #fbf2fa; color: #000000;'
+                        elif grupo == "APPROVAL (PC)":
+                            estilos.at[idx, col] = 'background-color: #f3daf1; color: #000000;'
+                            
+                    # 🚨 EXCEÇÃO RIGIDA DAS DUAS NOVAS COLUNAS SE NÃO HOUVER ATRASO
+                    if not tem_atraso:
+                        if grupo == "SITUAÇÃO DO ITEM":
+                            estilos.at[idx, col] = 'background-color: #70ad47; color: #ffffff; font-weight: bold;' # Verde Forte corporativo
+                        elif grupo == "ALERTA DE DATA":
+                            estilos.at[idx, col] = 'background-color: #fff2cc; color: #000000;' # Amarelo bem fraco pastel
             return estilos
 
+        # Injeta o código CSS para colorir os blocos fixos superiores do cabeçalho HTML
         st.markdown("""
             <style>
                 th.col_heading.level0 { font-weight: bold !important; color: #000000 !important; text-align: center !important; }
-                th.col_heading.level0.id0_6 { background-color: #e2f0d9 !important; }
-                th.col_heading.level0.id7_9 { background-color: #a9d08e !important; }
-                th.col_heading.level0.id10_13 { background-color: #f2dcfa !important; }
-                th.col_heading.level0.id14_16 { background-color: #df9ff2 !important; }
+                th.col_heading.level0.id0_6 { background-color: #e2f0d9 !important; }   /* RM verde claro */
+                th.col_heading.level0.id7_9 { background-color: #a9d08e !important; }   /* Approval RM verde médio */
+                th.col_heading.level0.id10_13 { background-color: #f2dcfa !important; } /* PC rosa claro */
+                th.col_heading.level0.id14_16 { background-color: #df9ff2 !important; } /* Approval PC roxo médio */
+                
+                /* NOVOS CABEÇALHOS ADICIONADOS */
+                th.col_heading.level0.id17 { background-color: #548235 !important; color: #ffffff !important; } /* Situação verde escuro */
+                th.col_heading.level0.id18 { background-color: #ffe599 !important; } /* Alerta amarelo fraco */
             </style>
         """, unsafe_allow_html=True)
 
+        # Renderiza a tabela definitiva estruturada com todas as regras unificadas
         df_estilizado = df_exibicao.style.apply(aplicar_cores_corpo, axis=None)
         st.dataframe(df_estilizado, use_container_width=True, hide_index=True)
 
