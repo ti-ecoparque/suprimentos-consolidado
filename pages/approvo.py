@@ -224,42 +224,51 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         else:
             df_final = df_final.drop_duplicates().copy()
 
+                # ==========================================================
+        # 🚨 7.5 PROCESSAMENTO SEGURO DE DATAS E CÁLCULO DE ATRASO (BLINDADO)
         # ==========================================================
-        # 🚨 7.5 PROCESSAMENTO SEGURO DE DATAS E CÁLCULO DE ATRASO
-        # ==========================================================
-        # Criamos vetores isolados em formato datetime puro forçando NaT (nulo) em qualquer traço ou string residual
+        # Extraímos séries isoladas nativas da memória forçando NaT (nulo de data) em qualquer erro
         dt_entrega_puro = pd.to_datetime(df_final["entrega"], errors="coerce")
         dt_necessidade_puro = pd.to_datetime(df_final["data_necessidade"], errors="coerce")
         dt_emissao_puro = pd.to_datetime(df_final["data_emissao"], errors="coerce")
 
-        def calcular_atraso_seguro(idx):
+        # Criamos uma lista nativa para armazenar as strings calculadas fora do DataFrame
+        lista_alertas_data = []
+        for idx in df_final.index:
             dt_ent = dt_entrega_puro.loc[idx]
             dt_nec = dt_necessidade_puro.loc[idx]
             
             if pd.isna(dt_ent) or pd.isna(dt_nec):
-                return "Data não informada"
-                
-            try:
-                diferenca = (dt_ent - dt_nec).days
-                if diferenca > 0:
-                    return f"Atraso de {diferenca} dias"
-                elif diferenca < 0:
-                    return f"Adiantado {abs(diferenca)} dias"
-                return "No prazo"
-            except Exception:
-                return "Data não informada"
+                lista_alertas_data.append("Data não informada")
+            else:
+                try:
+                    diferenca = (dt_ent - dt_nec).days
+                    if diferenca > 0:
+                        lista_alertas_data.append(f"Atraso de {diferenca} dias")
+                    elif diferenca < 0:
+                        lista_alertas_data.append(f"Adiantado {abs(diferenca)} dias")
+                    else:
+                        lista_alertas_data.append("No prazo")
+                except Exception:
+                    lista_alertas_data.append("Data não informada")
 
-        df_final["alerta_data"] = df_final.index.map(calcular_atraso_seguro)
+        # Injeta o resultado do cálculo na coluna como tipo texto (object) puro
+        df_final["alerta_data"] = lista_alertas_data
 
-        # Filtro de intervalo de período operando de forma 100% isolada e cronológica
+        # Filtro de intervalo de período operando de forma 100% isolada e matemática pelos índices puros
         if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2:
             try:
                 data_inicio = pd.to_datetime(filtro_periodo[0])
                 data_fim = pd.to_datetime(filtro_periodo[1])
                 
                 if pd.notna(data_inicio) and pd.notna(data_fim):
+                    # Filtra os índices que atendem à regra cronológica no vetor isolado
                     indices_validos = df_final.index[(dt_emissao_puro >= data_inicio) & (dt_emissao_puro <= data_fim)]
                     df_final = df_final.loc[indices_validos].copy()
+                    
+                    # Atualiza os vetores de pintura correspondentes para não desalinharem na Etapa 9
+                    dt_entrega_puro = dt_entrega_puro.loc[indices_validos]
+                    dt_necessidade_puro = dt_necessidade_puro.loc[indices_validos]
             except Exception:
                 pass
 
@@ -268,8 +277,8 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             st.stop()
 
         # Guardamos cópias estáveis dos vetores datetime puros para a pintura de linhas na Etapa 9
-        df_final["entrega_original_dt"] = pd.to_datetime(df_final["entrega"], errors="coerce")
-        df_final["necessidade_original_dt"] = pd.to_datetime(df_final["data_necessidade"], errors="coerce")
+        df_final["entrega_original_dt"] = dt_entrega_puro
+        df_final["necessidade_original_dt"] = dt_necessidade_puro
 
         # ==========================================================
         # 📊 8. MAPEAMENTO, TRADUÇÃO E TEXTOS AMIGÁVEIS NAS COLUNAS
@@ -290,8 +299,8 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         if "quantidade_comprada" in df_final.columns:
             df_final["quantidade_comprada"] = pd.to_numeric(df_final["quantidade_comprada"], errors="coerce").fillna(0).astype(int)
 
-        # 🚨 SOLUÇÃO REAL DEFINITIVA: Forçamos a conversão das colunas de data em strings de texto comuns (tipo object)
-        # Isso remove a assinatura datetime64 nativa das colunas visuais e impede o Pandas de lançar exceções.
+        # 🚨 DESTRUIÇÃO DE DTYPE: Forçamos as colunas visuais a virarem strings de texto comuns (tipo 'object').
+        # Fazendo isso de forma explícita por loop, o Pandas apaga a assinatura de data nativa e elimina o erro.
         colunas_de_data = ["data_emissao", "data_necessidade", "entrega", "data_ocorrencia", "data_ocorrencia_pc"]
         for col in colunas_de_data:
             if col in df_final.columns:
@@ -301,11 +310,11 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                 else:
                     df_final[col] = convertido.dt.strftime("%d/%m/%Y").fillna("Data não informada").astype(str)
 
-        # Injetamos as strings amigáveis para linhas órfãs geradas pelo Outer Join
+        # Preenche lacunas de texto órfãs geradas pelo Outer Join
         df_final["nome_solicitante"] = df_final["nome_solicitante"].fillna("RM Sem Fluxo Approvo").astype(str)
         df_final["desc_item"] = df_final["desc_item"].fillna("Direto p/ Compras").astype(str)
 
-        # Tratamento final de nulos textuais genéricos (Apenas no final do arquivo!)
+        # Tratamento final e unificado de nulos residuais genéricos de texto
         df_final.fillna("---", inplace=True)
         df_final.replace("nan", "---", inplace=True)
 
@@ -339,6 +348,7 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         colunas_existentes = [col for col in colunas_multi_index.keys() if col in df_final.columns]
         df_exibicao = df_final[colunas_existentes].copy()
         df_exibicao.columns = pd.MultiIndex.from_tuples([colunas_multi_index[c] for c in colunas_existentes])
+
 
                 # ==========================================================
         # 🎨 9. LAYOUT CROMÁTICO (PALETA PASTEL COMPLETA ATUALIZADA)
