@@ -236,9 +236,11 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         else:
             df_final = df_final.drop_duplicates().copy()
 
+                # ==========================================================
+        # 🚨 7.5 PROCESSAMENTO SEGURO DE DATAS E CÁLCULO DE ATRASO (BLINDADO OUTER JOIN)
         # ==========================================================
-        # 🚨 7.5 PROCESSAMENTO SEGURO DE DATAS E CÁLCULO DE ATRASO
-        # ==========================================================
+        # Forçamos o errors="coerce" imediatamente. Qualquer string inválida ou lacuna do Outer Join
+        # vira nulo cronológico puro (NaT) na memória e impede o Pandas de lançar a exceção de dtype
         dt_entrega_puro = pd.to_datetime(df_final["entrega"], errors="coerce")
         dt_necessidade_puro = pd.to_datetime(df_final["data_necessidade"], errors="coerce")
         dt_emissao_puro = pd.to_datetime(df_final["data_emissao"], errors="coerce")
@@ -246,8 +248,10 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         def calcular_atraso_seguro(idx):
             dt_ent = dt_entrega_puro.loc[idx]
             dt_nec = dt_necessidade_puro.loc[idx]
+            
             if pd.isna(dt_ent) or pd.isna(dt_nec):
                 return "Data não informada"
+                
             try:
                 diferenca = (dt_ent - dt_nec).days
                 if diferenca > 0:
@@ -258,14 +262,19 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             except Exception:
                 return "Data não informada"
 
+        # Executa o cálculo usando o mapa de índices dos vetores datetime nativos e isolados
         df_final["alerta_data"] = df_final.index.map(calcular_atraso_seguro)
 
+        # Filtro de intervalo de período operando de forma matemática e isolada pelos índices puros
         if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2:
+            # Garante a extração segura dos limites cronológicos informados na tela
             d_ini = filtro_periodo[0]
             d_fim = filtro_periodo[1]
+            
             if pd.notna(d_ini) and pd.notna(d_fim):
                 data_inicio = pd.to_datetime(d_ini)
                 data_fim = pd.to_datetime(d_fim)
+                
                 indices_validos = df_final.index[(dt_emissao_puro >= data_inicio) & (dt_emissao_puro <= data_fim)]
                 df_final = df_final.loc[indices_validos].copy()
 
@@ -273,6 +282,7 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             st.warning("⚠️ Nenhum registro corresponde aos critérios selecionados.")
             st.stop()
 
+        # Guardamos cópias estáveis especificamente para a lógica de colorização da Etapa 9
         df_final["entrega_original_dt"] = pd.to_datetime(df_final["entrega"], errors="coerce")
         df_final["necessidade_original_dt"] = pd.to_datetime(df_final["data_necessidade"], errors="coerce")
 
@@ -295,6 +305,8 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         if "quantidade_comprada" in df_final.columns:
             df_final["quantidade_comprada"] = pd.to_numeric(df_final["quantidade_comprada"], errors="coerce").fillna(0).astype(int)
 
+        # Forçamos a conversão das colunas de data em strings de texto comuns (tipo object)
+        # Isso remove a assinatura datetime64 e blinda o Pandas contra falhas de renderização
         colunas_de_data = ["data_emissao", "data_necessidade", "entrega", "data_ocorrencia", "data_ocorrencia_pc"]
         for col in colunas_de_data:
             if col in df_final.columns:
@@ -304,9 +316,11 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                 else:
                     df_final[col] = convertido.dt.strftime("%d/%m/%Y").fillna("Data não informada").astype(str)
 
+        # Tratamento final de nulos textuais para as demais colunas genéricas do grid
         df_final.fillna("---", inplace=True)
         df_final.replace("nan", "---", inplace=True)
 
+        # Estrutura do Dicionário de MultiIndex (Super Cabeçalho Agrupado)
         colunas_multi_index = {
             "nome_solicitante":   ("REQUISICAO DE MATERIAL MEGA", "Requisitante"),
             "rm":                 ("REQUISICAO DE MATERIAL MEGA", "Nr. RM"),
@@ -336,6 +350,7 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         colunas_existentes = [col for col in colunas_multi_index.keys() if col in df_final.columns]
         df_exibicao = df_final[colunas_existentes].copy()
         df_exibicao.columns = pd.MultiIndex.from_tuples([colunas_multi_index[c] for c in colunas_existentes])
+
                 # ==========================================================
         # 🎨 9. LAYOUT CROMÁTICO (PALETA PASTEL COMPLETA ATUALIZADA)
         # ==========================================================
