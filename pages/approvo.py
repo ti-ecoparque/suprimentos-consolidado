@@ -314,19 +314,30 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         # Filtro de intervalo de período usando o vetor nativo isolado
         if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2:
             try:
-                if pd.notna(filtro_periodo[0]) and pd.notna(filtro_periodo[1]):
-                    data_inicio = pd.to_datetime(filtro_periodo[0])
-                    data_fim = pd.to_datetime(filtro_periodo[1])
+                # 🔍 FIX ABSOLUTO: Coleta os limites informados na interface do Streamlit
+                d_ini = filtro_periodo[0]
+                d_fim = filtro_periodo[1]
+                
+                if pd.notna(d_ini) and pd.notna(d_fim):
+                    data_inicio = pd.to_datetime(d_ini)
+                    data_fim = pd.to_datetime(d_fim)
                     
-                    indices_validos = df_final.index[(dt_emissao_puro >= data_inicio) & (dt_emissao_puro <= data_fim)]
+                    # Extrai o vetor cronológico DIRETAMENTE da coluna bruta obtida do Supabase,
+                    # forçando coerce para que qualquer string residual vire nulo matemático (NaT)
+                    dt_emissao_limpo_calculo = pd.to_datetime(df_final["data_emissao"], errors="coerce")
+                    
+                    # Executa a filtragem matemática sem chance de colisão de strings ou dtypes inválidos
+                    indices_validos = df_final.index[(dt_emissao_limpo_calculo >= data_inicio) & (dt_emissao_limpo_calculo <= data_fim)]
+                    
                     df_final = df_final.loc[indices_validos].copy()
                     dt_entrega_puro = dt_entrega_puro.loc[indices_validos]
                     dt_necessidade_puro = dt_necessidade_puro.loc[indices_validos]
-            except Exception:
+            except Exception as ex:
+                # Em caso de qualquer flutuação de tipo de dados, mantém o DataFrame original seguro
                 pass
 
         if df_final.empty:
-            st.warning("⚠️ Nenhum registro corresponde aos critérios selecionados.")
+            st.warning("⚠️ Nenhum registro corresponde aos critérios selecionados no período.")
             st.stop()
 
         # Guarda as séries em colunas de controle interno para o Layout Cromático (Etapa 9)
