@@ -155,10 +155,10 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             st.warning("⚠️ Nenhum registro correspondente aos critérios selecionados.")
             st.stop()
 
-        # ==========================================================
+                # ==========================================================
         # 🔄 7. LOGÍSTICA DE UNIFICAÇÃO (BLINDAGEM ESTRUTURAL DE COLUNAS)
         # ==========================================================
-        # Lista padrão de colunas vitais para garantir que o Pandas NUNCA dê KeyError
+        # 🚨 LISTA PADRÃO CRÍTICA EQUALIZADA: Possui exatamente 20 elementos para zerar o Length mismatch
         todas_colunas_vitais = [
             "nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", 
             "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", 
@@ -174,8 +174,8 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             df_rm_bruto["mat_str"] = df_rm_bruto.get("mat", "---")
             df_rm_limpo = df_rm_bruto.drop_duplicates().copy()
         else:
+            # 🚨 FIX CIRÚRGICO: Cria as colunas com a lista exata de 20 elementos
             df_rm_limpo = pd.DataFrame(columns=todas_colunas_vitais)
-            df_rm_limpo.loc[0] = "---"
 
         # Garantia de colunas na RM limpa
         if "rm_str" not in df_rm_limpo.columns: df_rm_limpo["rm_str"] = "---"
@@ -212,8 +212,8 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                 "quantidade": "quantidade_comprada"
             }, inplace=True, errors="ignore")
         else:
+            # 🚨 FIX CIRÚRGICO: Cria as colunas com a lista exata de 20 elements
             df_pc_limpo = pd.DataFrame(columns=todas_colunas_vitais)
-            df_pc_limpo.loc[0] = "---"
 
         if "pedido_str" not in df_pc_limpo.columns: df_pc_limpo["pedido_str"] = "---"
         if "mat_str" not in df_pc_limpo.columns: df_pc_limpo["mat_str"] = "---"
@@ -224,7 +224,7 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         df_pc_limpo["pedido_str"] = df_pc_limpo["pedido_str"].astype(str).str.strip()
         df_pc_limpo["mat_str"] = df_pc_limpo["mat_str"].astype(str).str.strip()
 
-        # 🔥 OUTER JOIN COMPLETO INFALÍVEL
+        # 🔥 OUTER JOIN COMPLETO INFALÍVEL SINCRO
         df_final = pd.merge(df_rm_consolidada, df_pc_limpo, on=["pedido_str", "mat_str"], how="outer")
 
         # Garante a existência de todas as colunas necessárias pós-merge para evitar quebras adiante
@@ -235,20 +235,6 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         df_final["rm"] = df_final["rm"].fillna(df_final["rm_str"])
         df_final["mat"] = df_final["mat"].fillna(df_final["mat_str"])
 
-        # Aplica filtros combinados rígidos em nível de memória
-        if buscar_rm:
-            df_final = df_final[df_final["rm_str"] == str(buscar_rm).strip()]
-        if filtro_req != "Todos":
-            df_final = df_final[df_final["nome_solicitante"].astype(str).str.strip() == str(filtro_req).strip()]
-        if filtro_comp != "Todos":
-            df_final = df_final[df_final["comprador"].astype(str).str.strip() == str(filtro_comp).strip()]
-        if filtro_status_pc != "Todos":
-            mapa_invertido = {"Aprovado": "A", "Em Aprovação": "E", "Reprovado": "R"}
-            df_final = df_final[df_final["status_pc"].astype(str).str.strip().str.upper() == mapa_invertido[filtro_status_pc].upper()]
-
-        # Trava anti-duplicidade definitiva
-        df_final["rm_mat_key"] = df_final["rm"].astype(str) + "_" + df_final["mat"].astype(str)
-        df_final = df_final.drop_duplicates(subset=["rm_mat_key"]).copy()
 
         # ==========================================================
         # 🚨 7.5 PROCESSAMENTO SEGURO DE DATAS E CÁLCULO DE ATRASO (100% PYTHON NATIVO)
