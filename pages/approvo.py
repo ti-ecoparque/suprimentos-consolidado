@@ -209,6 +209,7 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         
         # Faz os rebatizados cirúrgicos das colunas exclusivas do PC para não colidirem com a RM
         df_pc_limpo.rename(columns={
+            "mat": "mat", 
             "nome_solicitante": "comprador",
             "status_documento": "status_pc",
             "data_oficial_ocorrencia": "data_ocorrencia_pc",
