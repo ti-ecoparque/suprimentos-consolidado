@@ -259,24 +259,31 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             st.warning("⚠️ Nenhum registro corresponde ao intervalo de datas selecionado.")
             st.stop()
 
+                # ==========================================================
+        # 🚨 7.5 CÁLCULO LOGÍSTICA DO ALERTA DE DATA (BLINDADO CONTRA NULOS)
         # ==========================================================
-        # 🚨 ADICIONADO: 7.5 CÁLCULO LOGÍSTICO DO ALERTA DE DATA (ATRASO)
-        # ==========================================================
+        # Guardamos as datas originais convertidas de forma limpa ANTES de qualquer preenchimento de texto
+        df_final["entrega_original_dt"] = pd.to_datetime(df_final["entrega"], errors="coerce")
+        df_final["necessidade_original_dt"] = pd.to_datetime(df_final["data_necessidade"], errors="coerce")
+
         def calcular_atraso(row):
-            if pd.isna(row.get("entrega")) or pd.isna(row.get("data_necessidade")):
-                return "---"
+            dt_entrega = row["entrega_original_dt"]
+            dt_necessidade = row["necessidade_original_dt"]
+            
+            # Se qualquer uma das duas datas fundamentais estiver vazia, ignora o cálculo
+            if pd.isna(dt_entrega) or pd.isna(dt_necessidade):
+                return "Data não informada"
+                
             try:
-                dt_entrega = pd.to_datetime(row["entrega"], errors="coerce")
-                dt_necessidade = pd.to_datetime(row["data_necessidade"], errors="coerce")
-                if pd.notna(dt_entrega) and pd.notna(dt_necessidade):
-                    diferenca = (dt_entrega - dt_necessidade).days
-                    if diferenca > 0:
-                        return f"Atraso de {diferenca} dias"
+                # Calcula a diferença exata de dias corridos entre o planejado e o realizado
+                diferenca = (dt_entrega - dt_necessidade).days
+                if diferenca > 0:
+                    return f"Atraso de {diferenca} dias"
                 return "No prazo"
             except Exception:
                 return "---"
 
-        # Executa o cálculo linha por linha antes de formatar as datas como string
+        # Executa a validação linha por linha
         df_final["alerta_data"] = df_final.apply(calcular_atraso, axis=1)
 
         # ==========================================================
@@ -298,18 +305,17 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         if "quantidade_comprada" in df_final.columns:
             df_final["quantidade_comprada"] = pd.to_numeric(df_final["quantidade_comprada"], errors="coerce").fillna(0).astype(int)
 
-        # Mantém uma cópia limpa das datas para a regra de colorização condicional da linha mais abaixo
-        df_final["entrega_original_dt"] = pd.to_datetime(df_final["entrega"], errors="coerce")
-        df_final["necessidade_original_dt"] = pd.to_datetime(df_final["data_necessidade"], errors="coerce")
-
+        # Formatação visual das datas na tabela brasileira
         for col in ["data_emissao", "data_necessidade", "entrega"]:
             if col in df_final.columns:
-                df_final[col] = pd.to_datetime(df_final[col], errors="coerce").dt.strftime("%d/%m/%Y")
+                # 🚨 REGRA CRÍTICA: Se a data for nula, formata com o texto solicitado pelo negócio
+                df_final[col] = pd.to_datetime(df_final[col], errors="coerce").dt.strftime("%d/%m/%Y").fillna("Data não informada")
                 
         for col in ["data_ocorrencia", "data_ocorrencia_pc"]:
             if col in df_final.columns:
-                df_final[col] = pd.to_datetime(df_final[col], errors="coerce").dt.strftime("%d/%m/%Y %H:%M")
+                df_final[col] = pd.to_datetime(df_final[col], errors="coerce").dt.strftime("%d/%m/%Y %H:%M").fillna("Data não informada")
 
+        # Limpa os nulos das demais colunas genéricas de texto
         df_final.fillna("---", inplace=True)
         df_final.replace("nan", "---", inplace=True)
 
@@ -336,15 +342,14 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             "data_ocorrencia_pc": ("APPROVAL (PC)", "Data da Aprovação"),
             "nome_aprovador_pc":  ("APPROVAL (PC)", "Aprovador"),
             
-            # 🚨 NOVAS COLUNAS INTEGRADAS OPERACIONAIS
             "sit_item":           ("SITUAÇÃO DO ITEM", "Situação"),
             "alerta_data":        ("ALERTA DE DATA", "Alerta de Entrega")
-            
         }
 
         colunas_existentes = [col for col in colunas_multi_index.keys() if col in df_final.columns]
         df_exibicao = df_final[colunas_existentes].copy()
         df_exibicao.columns = pd.MultiIndex.from_tuples([colunas_multi_index[c] for c in colunas_existentes])
+
 
         # ==========================================================
         # 🎨 9. LAYOUT CROMÁTICO (PALETA PASTEL E ADICIONAIS)
