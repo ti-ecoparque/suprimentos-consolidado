@@ -249,17 +249,22 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             df_final = df_final.drop_duplicates().copy()
 
         # Filtro de intervalo de período blindado individualmente contra listas
-        if len(filtro_periodo) == 2:
-            data_inicio = pd.to_datetime(filtro_periodo)
-            data_fim = pd.to_datetime(filtro_periodo)
+        # Garante que a lista possui exatamente as duas datas (Início e Fim) antes de filtrar
+        if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2:
+            data_inicio = pd.to_datetime(filtro_periodo[0])
+            data_fim = pd.to_datetime(filtro_periodo[1])
+            
+            # Converte temporariamente a coluna para formato datetime do Pandas para fazer o cálculo
             df_final["data_emissao_dt"] = pd.to_datetime(df_final["data_emissao"], errors="coerce")
+            
+            # Aplica o filtro de intervalo excludente
             df_final = df_final[(df_final["data_emissao_dt"] >= data_inicio) & (df_final["data_emissao_dt"] <= data_fim)]
 
         if df_final.empty:
-            st.warning("⚠️ Nenhum registro corresponde ao intervalo de datas selecionado.")
+            st.warning("⚠️ Nenhum registro corresponde aos critérios selecionados.")
             st.stop()
-
-                # ==========================================================
+            
+        # ==========================================================
         # 🚨 7.5 CÁLCULO LOGÍSTICA DO ALERTA DE DATA (BLINDADO CONTRA NULOS)
         # ==========================================================
         # Guardamos as datas originais convertidas de forma limpa ANTES de qualquer preenchimento de texto
