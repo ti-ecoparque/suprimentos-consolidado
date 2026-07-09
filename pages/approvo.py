@@ -234,9 +234,10 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             df_final = df_final.drop_duplicates().copy()
 
                 # ==========================================================
-        # 🚨 7.5 PROCESSAMENTO SEGURO DE DATAS E CÁLCULO DE ATRASO
+        # 🚨 7.5 PROCESSAMENTO SEGURO DE DATAS E CÁLCULO DE ATRASO (BLINDAGEM DA RAIZ)
         # ==========================================================
-        # Criamos cópias isoladas das séries originais em formato datetime puro ANTES de formatar como string
+        # 🔥 FIX DEFINITIVO: Forçamos o 'errors="coerce"' IMEDIATAMENTE na criação das variáveis de cálculo.
+        # Qualquer traço '---' ou 'Data não informada' do banco vira nulo matemático (NaT) e não quebra o sistema!
         dt_entrega_puro = pd.to_datetime(df_final["entrega"], errors="coerce")
         dt_necessidade_puro = pd.to_datetime(df_final["data_necessidade"], errors="coerce")
         dt_emissao_puro = pd.to_datetime(df_final["data_emissao"], errors="coerce")
@@ -245,6 +246,7 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             dt_ent = dt_entrega_puro.loc[idx]
             dt_nec = dt_necessidade_puro.loc[idx]
             
+            # Se faltar qualquer uma das duas datas, responde com o texto padrão do negócio
             if pd.isna(dt_ent) or pd.isna(dt_nec):
                 return "Data não informada"
                 
@@ -256,15 +258,14 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             except Exception:
                 return "Data não informada"
 
-        # Executa o cálculo usando os vetores de data puros isolados da memória principal
+        # Executa o mapeamento de atrasos com base nos vetores limpos da memória
         df_final["alerta_data"] = df_final.index.map(calcular_atraso_seguro)
 
-        # 🚨 FILTRO DE INTERVALO DE PERÍODO TOTALMENTE ISOLADO CONTRA LISTAS E CONFLITOS DE TIPOS
+        # Filtro de intervalo de período operando de forma 100% isolada e matemática
         if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2:
             data_inicio = pd.to_datetime(filtro_periodo[0])
             data_fim = pd.to_datetime(filtro_periodo[1])
             
-            # Filtra os índices que atendem ao critério usando o vetor puro de emissão
             indices_validos = df_final.index[(dt_emissao_puro >= data_inicio) & (dt_emissao_puro <= data_fim)]
             df_final = df_final.loc[indices_validos].copy()
 
@@ -272,12 +273,12 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             st.warning("⚠️ Nenhum registro corresponde aos critérios selecionados.")
             st.stop()
 
-        # Guardamos esses dois vetores limpos especificamente para a lógica de colorização da Etapa 9
+        # Guardamos cópias estáveis dos vetores datetime puros para a pintura de linhas na Etapa 9
         df_final["entrega_original_dt"] = pd.to_datetime(df_final["entrega"], errors="coerce")
         df_final["necessidade_original_dt"] = pd.to_datetime(df_final["data_necessidade"], errors="coerce")
 
-                # ==========================================================
-        # 📊 8. MAPEAMENTO, TRADUÇÃO E PROCESSAMENTO COMPLETO DE STRINGS
+        # ==========================================================
+        # 📊 8. MAPEAMENTO, TRADUÇÃO E TEXTOS AMIGÁVEIS NAS COLUNAS
         # ==========================================================
         mapa_status_extenso = {"A": "Aprovado", "E": "Em Aprovação", "R": "Reprovado", "---": "---"}
         
@@ -295,17 +296,12 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         if "quantidade_comprada" in df_final.columns:
             df_final["quantidade_comprada"] = pd.to_numeric(df_final["quantidade_comprada"], errors="coerce").fillna(0).astype(int)
 
-        # 🚨 FUNÇÃO ULTRA-BLINDADA PARA FORMATAÇÃO DE DATAS:
-        # Se a coluna contiver '---', 'nan' ou nulo, o framework ignora o erro matematicamente
-        # e preenche com o texto corporativo correto sem estourar o erro 'datetime64[s]'
+        # Formatação visual das datas na interface do usuário (Garante texto amigável se nulo)
         def formatar_data_segura(serie, incluir_hora=False):
             formato = "%d/%m/%Y %H:%M" if incluir_hora else "%d/%m/%Y"
-            # Converte forçando nulo (NaT) em qualquer texto inválido como '---'
             convertido = pd.to_datetime(serie, errors="coerce")
-            # Retorna a string formatada ou o aviso amigável
             return convertido.dt.strftime(formato).fillna("Data não informada")
 
-        # Aplica a formatação segura coluna por coluna
         if "data_emissao" in df_final.columns:
             df_final["data_emissao"] = formatar_data_segura(df_final["data_emissao"])
         if "data_necessidade" in df_final.columns:
@@ -318,7 +314,6 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         if "data_ocorrencia_pc" in df_final.columns:
             df_final["data_ocorrencia_pc"] = formatar_data_segura(df_final["data_ocorrencia_pc"], incluir_hora=True)
 
-        # Limpa os nulos residuais das demais colunas de texto (Apenas no final do arquivo!)
         df_final.fillna("---", inplace=True)
         df_final.replace("nan", "---", inplace=True)
 
@@ -352,6 +347,7 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         colunas_existentes = [col for col in colunas_multi_index.keys() if col in df_final.columns]
         df_exibicao = df_final[colunas_existentes].copy()
         df_exibicao.columns = pd.MultiIndex.from_tuples([colunas_multi_index[c] for c in colunas_existentes])
+
 
         # ==========================================================
         # 🎨 9. LAYOUT CROMÁTICO (PALETA PASTEL COMPLETA)
