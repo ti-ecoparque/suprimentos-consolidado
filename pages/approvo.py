@@ -169,9 +169,10 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             df_rm_bruto["mat_str"] = df_rm_bruto["mat"]
             df_rm_limpo = df_rm_bruto.drop_duplicates().copy()
         else:
+            # 🚨 CORREÇÃO REAL DO KEYERROR: Forçamos a estrutura a conter explicitamente as chaves de string 
+            # para que o pd.merge externo tenha onde se acoplar mesmo se a visão vier 100% vazia!
             df_rm_limpo = pd.DataFrame(columns=["rm_str", "mat_str", "nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador"])
-            df_rm_limpo["rm_str"] = "---"
-            df_rm_limpo["mat_str"] = "---"
+            df_rm_limpo.loc[0] = ["---"] * len(df_rm_limpo.columns)
 
         # 2. Prepara e limpa a tabela de vínculo intermediária
         if not df_vinculo.empty:
