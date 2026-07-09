@@ -157,20 +157,33 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         if df_rm_bruto.empty and buscar_rm:
             df_rm_bruto = pd.DataFrame([{"rm": int(buscar_rm)}])
 
-        # Força a criação das chaves mínimas em formato DataFrame se vierem vazias do Supabase
-        if df_rm_bruto.empty:
-            df_rm_bruto = pd.DataFrame(columns=["rm", "mat", "nome_solicitante", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador"])
-        if df_pc_bruto.empty:
-            df_pc_bruto = pd.DataFrame(columns=["pedido", "mat", "nome_solicitante", "entrega", "quantidade", "status_documento", "data_ocorrencia", "nome_aprovador"])
+        # 🚨 LISTA ESTRUTURAL MÃE: Alinha as 20 colunas de negócio para acabar com Length mismatch ou KeyError
+        todas_colunas_vitais = [
+            "nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", 
+            "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", 
+            "nome_aprovador", "rm_str", "mat_str", "pedido_str", "comprador", "entrega", 
+            "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"
+        ]
+
+        if df_pc_bruto.empty and df_rm_bruto.empty:
+            st.warning("⚠️ Nenhum registro correspondente aos critérios selecionados.")
+            st.stop()
 
         # ==========================================================
         # 🔄 7. LOGÍSTICA DE UNIFICAÇÃO (MÁGICA DO TEXT-ONLY OBJECTS)
         # ==========================================================
-        for c in df_rm_bruto.columns:
-            df_rm_bruto[c] = df_rm_bruto[c].astype(str).str.replace('.0', '', regex=False).str.strip()
-        df_rm_bruto["rm_str"] = df_rm_bruto.get("rm", "---")
-        df_rm_bruto["mat_str"] = df_rm_bruto.get("mat", "---")
-        df_rm_limpo = df_rm_bruto.drop_duplicates().copy()
+        if not df_rm_bruto.empty:
+            for c in df_rm_bruto.columns:
+                df_rm_bruto[c] = df_rm_bruto[c].astype(str).str.replace('.0', '', regex=False).str.strip()
+            df_rm_bruto["rm_str"] = df_rm_bruto.get("rm", "---")
+            df_rm_bruto["mat_str"] = df_rm_bruto.get("mat", "---")
+            df_rm_limpo = df_rm_bruto.drop_duplicates().copy()
+        else:
+            df_rm_limpo = pd.DataFrame(columns=todas_colunas_vitais)
+
+        # Garante as chaves na tabela da esquerda
+        if "rm_str" not in df_rm_limpo.columns: df_rm_limpo["rm_str"] = "---"
+        if "mat_str" not in df_rm_limpo.columns: df_rm_limpo["mat_str"] = "---"
 
         if not df_vinculo.empty:
             for c in df_vinculo.columns:
@@ -182,34 +195,44 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             df_rm_consolidada = df_rm_limpo.copy()
             df_rm_consolidada["pedido_str"] = "---"
 
-        for c in df_pc_bruto.columns:
-            df_pc_bruto[c] = df_pc_bruto[c].astype(str).str.replace('.0', '', regex=False).str.strip()
-        df_pc_bruto["pedido_str"] = df_pc_bruto.get("pedido", "---")
-        df_pc_bruto["mat_str"] = df_pc_bruto.get("mat", "---")
-        df_pc_limpo = df_pc_bruto.drop_duplicates().copy()
+        if "pedido_str" not in df_rm_consolidada.columns: df_rm_consolidada["pedido_str"] = "---"
+        if "mat_str" not in df_rm_consolidada.columns: df_rm_consolidada["mat_str"] = "---"
+        if "rm_str" not in df_rm_consolidada.columns: df_rm_consolidada["rm_str"] = "---"
 
-        mapa_colunas_pc = {
-            "nome_solicitante": "comprador",
-            "status_documento": "status_pc",
-            "data_oficial_ocorrencia": "data_ocorrencia_pc",
-            "data_ocorrencia": "data_ocorrencia_pc",
-            "nome_aprovador": "nome_aprovador_pc",
-            "quantidade": "quantidade_comprada"
-        }
-        mapa_existente = {k: v for k, v in mapa_colunas_pc.items() if k in df_pc_limpo.columns}
-        df_pc_limpo.rename(columns=mapa_existente, inplace=True)
+        if not df_pc_bruto.empty:
+            for c in df_pc_bruto.columns:
+                df_pc_bruto[c] = df_pc_bruto[c].astype(str).str.replace('.0', '', regex=False).str.strip()
+            df_pc_bruto["pedido_str"] = df_pc_bruto.get("pedido", "---")
+            df_pc_bruto["mat_str"] = df_pc_bruto.get("mat", "---")
+            
+            df_pc_limpo = df_pc_bruto.drop_duplicates().copy()
+            mapa_colunas_pc = {
+                "nome_solicitante": "comprador",
+                "status_documento": "status_pc",
+                "data_oficial_ocorrencia": "data_ocorrencia_pc",
+                "data_ocorrencia": "data_ocorrencia_pc",
+                "nome_aprovador": "nome_aprovador_pc",
+                "quantidade": "quantidade_comprada"
+            }
+            mapa_existente = {k: v for k, v in mapa_colunas_pc.items() if k in df_pc_limpo.columns}
+            df_pc_limpo.rename(columns=mapa_existente, inplace=True)
+        else:
+            df_pc_limpo = pd.DataFrame(columns=todas_colunas_vitais)
 
-        # Blindagem forçada de strings de eixos antes do merge para exterminar KeyError: 'mat'
-        for col_chave in ["pedido_str", "mat_str", "rm_str"]:
-            if col_chave not in df_rm_consolidada.columns: df_rm_consolidada[col_chave] = "---"
-            if col_chave not in df_pc_limpo.columns: df_pc_limpo[col_chave] = "---"
+        if "pedido_str" not in df_pc_limpo.columns: df_pc_limpo["pedido_str"] = "---"
+        if "mat_str" not in df_pc_limpo.columns: df_pc_limpo["mat_str"] = "---"
 
         df_rm_consolidada["pedido_str"] = df_rm_consolidada["pedido_str"].astype(str).str.strip()
         df_rm_consolidada["mat_str"] = df_rm_consolidada["mat_str"].astype(str).str.strip()
         df_pc_limpo["pedido_str"] = df_pc_limpo["pedido_str"].astype(str).str.strip()
         df_pc_limpo["mat_str"] = df_pc_limpo["mat_str"].astype(str).str.strip()
 
+        # União completa OUTER JOIN sobre texto puro
         df_final = pd.merge(df_rm_consolidada, df_pc_limpo, on=["pedido_str", "mat_str"], how="outer")
+
+        # Injeta as chaves se faltarem no merge final
+        for col in todas_colunas_vitais:
+            if col not in df_final.columns: df_final[col] = "---"
 
         df_final["rm"] = df_final.get("rm", pd.Series(dtype=str, index=df_final.index)).fillna(df_final["rm_str"])
         df_final["mat"] = df_final.get("mat", pd.Series(dtype=str, index=df_final.index)).fillna(df_final["mat_str"])
@@ -226,6 +249,7 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
 
         df_final["rm_mat_key"] = df_final["rm"].astype(str) + "_" + df_final["mat"].astype(str)
         df_final = df_final.drop_duplicates(subset=["rm_mat_key"]).copy()
+
 
         # ==========================================================
         # 🚨 7.5 PROCESSAMENTO SEGURO DE DATAS E CÁLCULO DE ATRASO
