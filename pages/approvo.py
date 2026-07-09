@@ -251,18 +251,45 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         df_final = df_final.drop_duplicates(subset=["rm_mat_key"]).copy()
 
                 # ==========================================================
-        # 🚨 7.5 PROCESSAMENTO SEGURO DE DATAS E CÁLCULO DE ATRASO
+        # 🚨 7.5 PROCESSAMENTO SEGURO DE DATAS E CÁLCULO DE ATRASO (IMUNE A ERROS)
         # ==========================================================
-        dt_entrega_puro = pd.to_datetime(df_final["entrega"], errors="coerce")
-        dt_necessidade_puro = pd.to_datetime(df_final["data_necessidade"], errors="coerce")
-        dt_emissao_puro = pd.to_datetime(df_final["data_emissao"], errors="coerce")
-
         lista_alertas_data = []
+        lista_dt_entrega_puro = []
+        lista_dt_necessidade_puro = []
+        lista_dt_emissao_puro = []
+
+        # Convertemos e calculamos linha por linha usando Python nativo, sem deixar o Pandas adivinhar dtypes
         for idx in df_final.index:
-            dt_ent = dt_entrega_puro.loc[idx]
-            dt_nec = dt_necessidade_puro.loc[idx]
+            val_entrega = df_final.loc[idx, "entrega"]
+            val_necessidade = df_final.loc[idx, "data_necessidade"]
+            val_emissao = df_final.loc[idx, "data_emissao"]
             
-            if pd.isna(dt_ent) or pd.isna(dt_nec) or str(dt_ent) in ["nan", "---"] or str(dt_nec) in ["nan", "---"]:
+            dt_ent = pd.NaT
+            dt_nec = pd.NaT
+            dt_emi = pd.NaT
+            
+            # Tratamento cirúrgico de conversão individual da entrega
+            if pd.notna(val_entrega) and str(val_entrega).strip() not in ["", "---", "nan", "None"]:
+                try: dt_ent = pd.to_datetime(val_entrega, errors='coerce')
+                except Exception: dt_ent = pd.NaT
+                
+            # Tratamento cirúrgico de conversão individual da necessidade
+            if pd.notna(val_necessidade) and str(val_necessidade).strip() not in ["", "---", "nan", "None"]:
+                try: dt_nec = pd.to_datetime(val_necessidade, errors='coerce')
+                except Exception: dt_nec = pd.NaT
+
+            # Tratamento cirúrgico de conversão individual da emissão
+            if pd.notna(val_emissao) and str(val_emissao).strip() not in ["", "---", "nan", "None"]:
+                try: dt_emi = pd.to_datetime(val_emissao, errors='coerce')
+                except Exception: dt_emi = pd.NaT
+
+            # Armazena nos vetores puros de auditoria
+            lista_dt_entrega_puro.append(dt_ent)
+            lista_dt_necessidade_puro.append(dt_nec)
+            lista_dt_emissao_puro.append(dt_emi)
+
+            # Lógica matemática de negócio para o cálculo de dias
+            if pd.isna(dt_ent) or pd.isna(dt_nec):
                 lista_alertas_data.append("Data não informada")
             else:
                 try:
@@ -276,15 +303,21 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                 except Exception:
                     lista_alertas_data.append("Data não informada")
 
+        # Injeta os resultados como colunas de texto/objeto comuns
         df_final["alerta_data"] = lista_alertas_data
+        
+        # Converte as listas nativas em Series temporárias estáveis
+        dt_emissao_puro = pd.Series(lista_dt_emissao_puro, index=df_final.index)
+        dt_entrega_puro = pd.Series(lista_dt_entrega_puro, index=df_final.index)
+        dt_necessidade_puro = pd.Series(lista_dt_necessidade_puro, index=df_final.index)
 
+        # Filtro de intervalo de período usando o vetor nativo isolado
         if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2:
             try:
-                d_ini = filtro_periodo[0]
-                d_fim = filtro_periodo[1]
-                if pd.notna(d_ini) and pd.notna(d_fim):
-                    data_inicio = pd.to_datetime(d_ini)
-                    data_fim = pd.to_datetime(d_fim)
+                if pd.notna(filtro_periodo[0]) and pd.notna(filtro_periodo[1]):
+                    data_inicio = pd.to_datetime(filtro_periodo[0])
+                    data_fim = pd.to_datetime(filtro_periodo[1])
+                    
                     indices_validos = df_final.index[(dt_emissao_puro >= data_inicio) & (dt_emissao_puro <= data_fim)]
                     df_final = df_final.loc[indices_validos].copy()
                     dt_entrega_puro = dt_entrega_puro.loc[indices_validos]
@@ -296,9 +329,9 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             st.warning("⚠️ Nenhum registro corresponde aos critérios selecionados.")
             st.stop()
 
+        # Guarda as séries em colunas de controle interno para o Layout Cromático (Etapa 9)
         df_final["entrega_original_dt"] = dt_entrega_puro
         df_final["necessidade_original_dt"] = dt_necessidade_puro
-
 
                 # ==========================================================
         # 📊 8. MAPEAMENTO, TRADUÇÃO E TEXTOS AMIGÁVEIS NAS COLUNAS
