@@ -120,10 +120,8 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         # B. Consulta na tabela de vínculo físico pedido_compra
         lista_rms_encontradas = []
         if not df_rm_bruto.empty and "rm" in df_rm_bruto.columns:
-            # Trava anti-dataframe: garante extração de série simples
-            col_rm_bruta = df_rm_bruto["rm"]
-            val_rms = col_rm_bruta.iloc[:, 0] if isinstance(col_rm_bruta, pd.DataFrame) else col_rm_bruta
-            lista_rms_encontradas = [int(float(x)) for x in val_rms.unique() if pd.notna(x) and str(x).strip() not in ["", "---", "nan"]]
+            s_rm_b = df_rm_bruto["rm"].iloc[:, 0] if isinstance(df_rm_bruto["rm"], pd.DataFrame) else df_rm_bruto["rm"]
+            lista_rms_encontradas = [int(float(x)) for x in s_rm_b.unique() if pd.notna(x) and str(x).strip() not in ["", "---", "nan"]]
 
         query_vinculo = supabase.table("pedido_compra").select("rm", "pedido")
         if buscar_rm:
@@ -136,9 +134,8 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
 
         lista_peds_vinculados = []
         if not df_vinculo.empty and "pedido" in df_vinculo.columns:
-            col_ped_bruto = df_vinculo["pedido"]
-            val_peds = col_ped_bruto.iloc[:, 0] if isinstance(col_ped_bruto, pd.DataFrame) else col_ped_bruto
-            lista_peds_vinculados = [str(int(float(x))) for x in val_peds.unique() if pd.notna(x) and str(x).strip() not in ["", "---", "nan"]]
+            s_ped_b = df_vinculo["pedido"].iloc[:, 0] if isinstance(df_vinculo["pedido"], pd.DataFrame) else df_vinculo["pedido"]
+            lista_peds_vinculados = [str(int(float(x))) for x in s_ped_b.unique() if pd.notna(x) and str(x).strip() not in ["", "---", "nan"]]
 
         # C. Consulta na visão de Pedidos de Compra (PC)
         df_pc_bruto = pd.DataFrame()
@@ -163,94 +160,91 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         if df_rm_bruto.empty and buscar_rm:
             df_rm_bruto = pd.DataFrame([{"rm": int(buscar_rm)}])
 
-        todas_colunas_vitais = [
-            "nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", 
-            "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", 
-            "nome_aprovador", "rm_str", "mat_str", "pedido_str", "comprador", "entrega", 
-            "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"
-        ]
+        # 🚨 COLUNAS EXCLUSIVAS DE CADA VISÃO PARA IMPEDIR DUPLICIDADES NO OUTER JOIN
+        cols_exclusivas_rm = ["nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador"]
+        cols_exclusivas_pc = ["pedido", "mat", "nome_solicitante", "entrega", "quantidade", "status_documento", "data_ocorrencia", "nome_aprovador"]
 
-        if df_rm_bruto.empty:
-            df_rm_bruto = pd.DataFrame(columns=todas_colunas_vitais)
-        if df_pc_bruto.empty:
-            df_pc_bruto = pd.DataFrame(columns=todas_colunas_vitais)
+        if df_rm_bruto.empty: df_rm_bruto = pd.DataFrame(columns=cols_exclusivas_rm)
+        if df_pc_bruto.empty: df_pc_bruto = pd.DataFrame(columns=cols_exclusivas_pc)
 
         # ==========================================================
-        # 🔄 7. LOGÍSTICA DE UNIFICAÇÃO (BLINDAGEM ANTI-DATAFRAME)
+        # 🔄 7. LOGÍSTICA DE UNIFICAÇÃO (FILTRO RIGIDO DE CHAVES)
         # ==========================================================
-        # 1. Normalização da tabela de RMs
+        # 1. Limpeza e isolamento estrito da tabela de RMs
         df_rm_limpo = pd.DataFrame(index=df_rm_bruto.index)
-        for c in df_rm_bruto.columns:
-            s = df_rm_bruto[c].iloc[:, 0] if isinstance(df_rm_bruto[c], pd.DataFrame) else df_rm_bruto[c]
-            df_rm_limpo[c] = s.fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
+        for c in cols_exclusivas_rm:
+            if c in df_rm_bruto.columns:
+                s = df_rm_bruto[c].iloc[:, 0] if isinstance(df_rm_bruto[c], pd.DataFrame) else df_rm_bruto[c]
+                df_rm_limpo[c] = s.fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
         
         df_rm_limpo["rm_str"] = df_rm_limpo.get("rm", "---")
         df_rm_limpo["mat_str"] = df_rm_limpo.get("mat", "---")
         df_rm_limpo = df_rm_limpo.drop_duplicates().copy()
 
-        # 2. Normalização da tabela de Vínculos
+        # 2. Limpeza e isolamento estrito da tabela de Vínculos
         if not df_vinculo.empty:
             df_vinculo_limpo = pd.DataFrame(index=df_vinculo.index)
-            for c in df_vinculo.columns:
-                s = df_vinculo[c].iloc[:, 0] if isinstance(df_vinculo[c], pd.DataFrame) else df_vinculo[c]
-                df_vinculo_limpo[c] = s.fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
+            for c in ["rm", "pedido"]:
+                if c in df_vinculo.columns:
+                    s = df_vinculo[c].iloc[:, 0] if isinstance(df_vinculo[c], pd.DataFrame) else df_vinculo[c]
+                    df_vinculo_limpo[c] = s.fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
             
             df_vinculo_limpo["rm_str"] = df_vinculo_limpo.get("rm", "---")
             df_vinculo_limpo["pedido_str"] = df_vinculo_limpo.get("pedido", "---")
+            # Faz o merge intermediário mantendo apenas o par de ligação
             df_rm_consolidada = pd.merge(df_rm_limpo, df_vinculo_limpo[["rm_str", "pedido_str"]], on="rm_str", how="outer")
         else:
             df_rm_consolidada = df_rm_limpo.copy()
             df_rm_consolidada["pedido_str"] = "---"
 
-        # 3. Normalização da tabela de Pedidos (PC)
+        # 3. Limpeza e isolamento estrito da tabela de Pedidos (PC)
         df_pc_limpo = pd.DataFrame(index=df_pc_bruto.index)
-        for c in df_pc_bruto.columns:
-            s = df_pc_bruto[c].iloc[:, 0] if isinstance(df_pc_bruto[c], pd.DataFrame) else df_pc_bruto[c]
-            df_pc_limpo[c] = s.fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
+        for c in cols_exclusivas_pc:
+            if c in df_pc_bruto.columns:
+                s = df_pc_bruto[c].iloc[:, 0] if isinstance(df_pc_bruto[c], pd.DataFrame) else df_pc_bruto[c]
+                df_pc_limpo[c] = s.fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
         
         df_pc_limpo["pedido_str"] = df_pc_limpo.get("pedido", "---")
         df_pc_limpo["mat_str"] = df_pc_limpo.get("mat", "---")
-        df_pc_limpo = df_pc_limpo.drop_duplicates().copy()
-
-        mapa_colunas_pc = {
+        
+        # Faz os rebatizados cirúrgicos das colunas exclusivas do PC para não colidirem com a RM
+        df_pc_limpo.rename(columns={
             "nome_solicitante": "comprador",
             "status_documento": "status_pc",
             "data_oficial_ocorrencia": "data_ocorrencia_pc",
             "data_ocorrencia": "data_ocorrencia_pc",
             "nome_aprovador": "nome_aprovador_pc",
             "quantidade": "quantidade_comprada"
-        }
-        mapa_existente = {k: v for k, v in mapa_colunas_pc.items() if k in df_pc_limpo.columns}
-        df_pc_limpo.rename(columns=mapa_existente, inplace=True)
+        }, inplace=True, errors="ignore")
+        df_pc_limpo = df_pc_limpo.drop_duplicates().copy()
 
-        # Garante eixos limpos de strings de controle antes do merge
+        # Garante a existência física única e limpa das chaves de acoplamento
         for col_chave in ["pedido_str", "mat_str", "rm_str"]:
             if col_chave not in df_rm_consolidada.columns: df_rm_consolidada[col_chave] = "---"
             if col_chave not in df_pc_limpo.columns: df_pc_limpo[col_chave] = "---"
             
-            # Força extração de série simples caso o merge anterior tenha duplicado chaves
-            if isinstance(df_rm_consolidada[col_chave], pd.DataFrame):
-                df_rm_consolidada[col_chave] = df_rm_consolidada[col_chave].iloc[:, 0]
-            if isinstance(df_pc_limpo[col_chave], pd.DataFrame):
-                df_pc_limpo[col_chave] = df_pc_limpo[col_chave].iloc[:, 0]
+            if isinstance(df_rm_consolidada[col_chave], pd.DataFrame): df_rm_consolidada[col_chave] = df_rm_consolidada[col_chave].iloc[:, 0]
+            if isinstance(df_pc_limpo[col_chave], pd.DataFrame): df_pc_limpo[col_chave] = df_pc_limpo[col_chave].iloc[:, 0]
 
             df_rm_consolidada[col_chave] = df_rm_consolidada[col_chave].astype(str).str.strip()
             df_pc_limpo[col_chave] = df_pc_limpo[col_chave].astype(str).str.strip()
 
-        # Merge definitivo imune a DataFrames duplicados
+        # 🔥 FIM DO KEYERROR E DO DATAFRAME ERROR: O outer join opera sobre colunas 100% limpas e mapeadas
         df_final = pd.merge(df_rm_consolidada, df_pc_limpo, on=["pedido_str", "mat_str"], how="outer")
 
+        # Lista padrão final para sanear nulos corporativos
+        todas_colunas_vitais = ["nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "rm_str", "mat_str", "pedido_str", "comprador", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"]
         for col in todas_colunas_vitais:
             if col not in df_final.columns: df_final[col] = "---"
 
-        # Limpeza final de chaves do grid
-        s_rm = df_final["rm"].iloc[:, 0] if isinstance(df_final["rm"], pd.DataFrame) else df_final["rm"]
-        s_mat = df_final["mat"].iloc[:, 0] if isinstance(df_final["mat"], pd.DataFrame) else df_final["mat"]
-        df_final["rm"] = s_rm.fillna(df_final["rm_str"])
-        df_final["mat"] = s_mat.fillna(df_final["mat_str"])
+        # Converte em série de texto simples antes de aplicar os filtros pós-cruzamento
+        s_final_rm = df_final["rm"].iloc[:, 0] if isinstance(df_final["rm"], pd.DataFrame) else df_final["rm"]
+        s_final_mat = df_final["mat"].iloc[:, 0] if isinstance(df_final["mat"], pd.DataFrame) else df_final["mat"]
+        df_final["rm"] = s_final_rm.fillna(df_final["rm_str"]).astype(str)
+        df_final["mat"] = s_final_mat.fillna(df_final["mat_str"]).astype(str)
 
         if buscar_rm:
-            df_final = df_final[df_final["rm_str"] == str(buscar_rm).strip()]
+            df_final = df_final[df_final["rm_str"].astype(str).str.strip() == str(buscar_rm).strip()]
         if filtro_req != "Todos":
             df_final = df_final[df_final["nome_solicitante"].astype(str).str.strip() == str(filtro_req).strip()]
         if filtro_comp != "Todos":
