@@ -173,6 +173,10 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         else:
             df_rm_limpo = pd.DataFrame(columns=["rm_str", "mat_str", "nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador"])
 
+        # 🚨 TRAVA DE SEGURANÇA 1: Garante as chaves na tabela de RMs limpa
+        if "rm_str" not in df_rm_limpo.columns: df_rm_limpo["rm_str"] = "---"
+        if "mat_str" not in df_rm_limpo.columns: df_rm_limpo["mat_str"] = "---"
+
         if not df_vinculo.empty:
             for c in df_vinculo.columns:
                 df_vinculo[c] = df_vinculo[c].astype(str).str.replace('.0', '', regex=False).str.strip()
@@ -182,6 +186,10 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         else:
             df_rm_consolidada = df_rm_limpo.copy()
             df_rm_consolidada["pedido_str"] = "---"
+
+        # 🚨 TRAVA DE SEGURANÇA 2: Garante as chaves na tabela consolidada intermediária
+        if "pedido_str" not in df_rm_consolidada.columns: df_rm_consolidada["pedido_str"] = "---"
+        if "mat_str" not in df_rm_consolidada.columns: df_rm_consolidada["mat_str"] = "---"
 
         if not df_pc_bruto.empty:
             for c in df_pc_bruto.columns:
@@ -202,6 +210,10 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             df_pc_limpo.rename(columns=mapa_existente, inplace=True)
         else:
             df_pc_limpo = pd.DataFrame(columns=["pedido_str", "mat_str", "comprador", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"])
+
+        # 🚨 TRAVA DE SEGURANÇA 3: Garante as chaves na tabela de Pedidos limpa
+        if "pedido_str" not in df_pc_limpo.columns: df_pc_limpo["pedido_str"] = "---"
+        if "mat_str" not in df_pc_limpo.columns: df_pc_limpo["mat_str"] = "---"
 
         df_rm_consolidada["pedido_str"] = df_rm_consolidada["pedido_str"].astype(str).str.strip()
         df_rm_consolidada["mat_str"] = df_rm_consolidada["mat_str"].astype(str).str.strip()
@@ -226,6 +238,7 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
 
         df_final["rm_mat_key"] = df_final["rm"].astype(str) + "_" + df_final["mat"].astype(str)
         df_final = df_final.drop_duplicates(subset=["rm_mat_key"]).copy()
+
         
     # ==========================================================
         # 🚨 7.5 PROCESSAMENTO SEGURO DE DATAS E CÁLCULO DE ATRASO
