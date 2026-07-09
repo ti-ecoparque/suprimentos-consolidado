@@ -93,11 +93,11 @@ if not tem_filtro_ativo:
     st.stop()
 
 # ==========================================================
-# 🚀 6. CONSTRUÇÃO DA QUERY INTELIGENTE INDEPENDENTE (INTERCEPTADOR DE JSON)
+# 🚀 6. CONSTRUÇÃO DA QUERY INTELIGENTE INDEPENDENTE (BLINDAGEM TOTAL)
 # ==========================================================
 with st.spinner("Buscando e cruzando visões comerciais..."):
     try:
-        # 📐 A. BUSCA NA VIEW DE REQUISIÇÕES (RM)
+        # A. Consulta na visão de Requisições de Material (RM)
         query_rm = supabase.table("vw_approvo_rm").select("*")
         if buscar_rm:
             query_rm = query_rm.eq("rm", str(buscar_rm))
@@ -108,22 +108,9 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             query_rm = query_rm.eq("status_documento", mapa_invertido[filtro_status_rm])
             
         res_rm = query_rm.limit(500).execute()
-        
-        # 🚨 INTERCEPTADOR ANTI-ERRO RM: Limpa dados temporais corrompidos antes do Pandas ler
-        dados_rm_limpos = []
-        colunas_data_rm = ["data_emissao", "data_necessidade", "data_ocorrencia"]
-        for linha in res_rm.data:
-            linha_copia = linha.copy()
-            for col in colunas_data_rm:
-                if col in linha_copia:
-                    v = str(linha_copia[col]).strip()
-                    if v in ["", "---", "nan", "None", "NaT"]:
-                        linha_copia[col] = None # Força None puro para o Pandas aceitar como nulo legítimo
-            dados_rm_limpos.append(linha_copia)
-            
-        df_rm_bruto = pd.DataFrame(dados_rm_limpos)
+        df_rm_bruto = pd.DataFrame(res_rm.data)
 
-        # 📐 B. BUSCA NA TABELA DE VÍNCULO PEDIDO_COMPRA
+        # B. Consulta na tabela de vínculo físico pedido_compra
         lista_rms_encontradas = []
         if not df_rm_bruto.empty and "rm" in df_rm_bruto.columns:
             lista_rms_encontradas = [int(float(x)) for x in df_rm_bruto["rm"].unique() if pd.notna(x)]
@@ -141,9 +128,8 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         if not df_vinculo.empty and "pedido" in df_vinculo.columns:
             lista_peds_vinculados = [str(int(float(x))) for x in df_vinculo["pedido"].unique() if pd.notna(x)]
 
-        # 📐 C. BUSCA NA VIEW DE PEDIDOS (PC)
+        # C. Consulta na visão de Pedidos de Compra (PC)
         query_pc = supabase.table("vw_approvo_pc").select("*")
-        
         if filtro_comp != "Todos" or filtro_status_pc != "Todos":
             if filtro_comp != "Todos":
                 query_pc = query_pc.eq("nome_solicitante", filtro_comp)
@@ -156,20 +142,7 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             query_pc = query_pc.none()
             
         res_pc = query_pc.limit(500).execute()
-        
-        # 🚨 INTERCEPTADOR ANTI-ERRO PC: Limpa dados temporais corrompidos antes do Pandas ler
-        dados_pc_limpos = []
-        colunas_data_pc = ["entrega", "data_ocorrencia", "data_ocorrencia_pc", "data_oficial_ocorrencia"]
-        for linha in res_pc.data:
-            linha_copia = linha.copy()
-            for col in colunas_data_pc:
-                if col in linha_copia:
-                    v = str(linha_copia[col]).strip()
-                    if v in ["", "---", "nan", "None", "NaT"]:
-                        linha_copia[col] = None # Força None puro para o Pandas aceitar como nulo legítimo
-            dados_pc_limpos.append(linha_copia)
-
-        df_pc_bruto = pd.DataFrame(dados_pc_limpos)
+        df_pc_bruto = pd.DataFrame(res_pc.data)
 
         if not df_pc_bruto.empty and "entregas_agendadas" in df_pc_bruto.columns:
             df_pc_bruto.drop(columns=["entregas_agendadas"], inplace=True)
@@ -181,19 +154,37 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             st.warning("⚠️ Nenhum registro correspondente aos critérios selecionados.")
             st.stop()
 
-         # ==========================================================
-        # 🔄 7. LOGÍSTICA DE UNIFICAÇÃO (MERGE INVERSO COMPLETO)
         # ==========================================================
-        # 🚨 ANTECIPAÇÃO DA BLINDAGEM: Removemos qualquer tratamento de string ou .fillna() das tabelas base
+        # 🔄 7. LOGÍSTICA DE UNIFICAÇÃO (MÁGICA DO TEXT-ONLY OBJECTS)
+        # ==========================================================
+        # Forçamos TODAS as colunas que podem gerar confusão no Pandas a virarem strings limpasimediatamente
+        if not df_rm_bruto.empty:
+            for c in df_rm_bruto.columns:
+                df_rm_bruto[c] = df_rm_bruto[c].astype(str).str.replace('.0', '', regex=False).str.strip()
+            df_rm_bruto["rm_str"] = df_rm_bruto["rm"]
+            df_rm_bruto["mat_str"] = df_rm_bruto["mat"]
+            df_rm_limpo = df_rm_bruto.drop_duplicates().copy()
+        else:
+            df_rm_limpo = pd.DataFrame(columns=["rm_str", "mat_str", "nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador"])
+
+        if not df_vinculo.empty:
+            for c in df_vinculo.columns:
+                df_vinculo[c] = df_vinculo[c].astype(str).str.replace('.0', '', regex=False).str.strip()
+            df_vinculo["rm_str"] = df_vinculo["rm"]
+            df_vinculo["pedido_str"] = df_vinculo["pedido"]
+            df_rm_consolidada = pd.merge(df_rm_limpo, df_vinculo[["rm_str", "pedido_str"]], on="rm_str", how="outer")
+        else:
+            df_rm_consolidada = df_rm_limpo.copy()
+            df_rm_consolidada["pedido_str"] = ""
+
         if not df_pc_bruto.empty:
-            df_pc_bruto["pedido_str"] = df_pc_bruto["pedido"].astype(str).str.replace('.0', '', regex=False).str.strip()
-            df_pc_bruto["mat_str"] = df_pc_bruto["mat"].astype(str).str.replace('.0', '', regex=False).str.strip()
+            for c in df_pc_bruto.columns:
+                df_pc_bruto[c] = df_pc_bruto[c].astype(str).str.replace('.0', '', regex=False).str.strip()
+            df_pc_bruto["pedido_str"] = df_pc_bruto["pedido"]
+            df_pc_bruto["mat_str"] = df_pc_bruto["mat"]
             
-            colunas_vitais_pc = ["pedido_str", "mat_str", "nome_solicitante", "entrega", "quantidade", "status_documento", "data_ocorrencia", "nome_aprovador"]
-            colunas_existentes_pc = [c for c in colunas_vitais_pc if c in df_pc_bruto.columns]
-            
-            df_pc_base = df_pc_bruto[colunas_existentes_pc].drop_duplicates().copy()
-            df_pc_base.rename(columns={
+            df_pc_limpo = df_pc_bruto.drop_duplicates().copy()
+            df_pc_limpo.rename(columns={
                 "nome_solicitante": "comprador",
                 "status_documento": "status_pc",
                 "data_oficial_ocorrencia": "data_ocorrencia_pc",
@@ -202,34 +193,22 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                 "quantidade": "quantidade_comprada"
             }, inplace=True, errors="ignore")
         else:
-            df_pc_base = pd.DataFrame(columns=["pedido_str", "mat_str", "comprador", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"])
+            df_pc_limpo = pd.DataFrame(columns=["pedido_str", "mat_str", "comprador", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"])
 
-        if not df_vinculo.empty:
-            df_vinculo["rm_str"] = df_vinculo["rm"].astype(str).str.replace('.0', '', regex=False).str.strip()
-            df_vinculo["pedido_str"] = df_vinculo["pedido"].astype(str).str.replace('.0', '', regex=False).str.strip()
-            df_pc_consolidado = pd.merge(df_pc_base, df_vinculo[["pedido_str", "rm_str"]], on="pedido_str", how="outer")
-        else:
-            df_pc_consolidado = df_pc_base.copy()
-            df_pc_consolidado["rm_str"] = ""
+        # Força as chaves de cruzamento para strings limpas sem chance de inferência automática do Pandas
+        df_rm_consolidada["pedido_str"] = df_rm_consolidada["pedido_str"].astype(str).str.strip()
+        df_rm_consolidada["mat_str"] = df_rm_consolidada["mat_str"].astype(str).str.strip()
+        df_pc_limpo["pedido_str"] = df_pc_limpo["pedido_str"].astype(str).str.strip()
+        df_pc_limpo["mat_str"] = df_pc_limpo["mat_str"].astype(str).str.strip()
 
-        if not df_rm_bruto.empty:
-            df_rm_bruto["rm_str"] = df_rm_bruto["rm"].astype(str).str.replace('.0', '', regex=False).str.strip()
-            df_rm_bruto["mat_str"] = df_rm_bruto["mat"].astype(str).str.replace('.0', '', regex=False).str.strip()
-            
-            colunas_vitais_rm = ["nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "rm_str", "mat_str"]
-            colunas_existentes_rm = [c for c in colunas_vitais_rm if c in df_rm_bruto.columns]
-            df_rm_limpo = df_rm_bruto[colunas_existentes_rm].drop_duplicates().copy()
-            
-            df_final = pd.merge(df_pc_consolidado, df_rm_limpo, on=["rm_str", "mat_str"], how="outer")
-        else:
-            df_final = df_pc_consolidado.copy()
-            for col in ["nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador"]:
-                df_final[col] = None
+        # O cruzamento em modo OUTER opera sobre strings de texto puro, impedindo o erro de dtype
+        df_final = pd.merge(df_rm_consolidada, df_pc_limpo, on=["pedido_str", "mat_str"], how="outer")
 
+        # Ajusta chaves para as linhas órfãs geradas pela junção
         df_final["rm"] = df_final["rm"].fillna(df_final["rm_str"])
         df_final["mat"] = df_final["mat"].fillna(df_final["mat_str"])
 
-        # Aplicação dos filtros combinados rígidos em nível de memória sobre o DataFrame limpo
+        # Aplica filtros combinados rígidos em texto limpo sobre a memória final
         if buscar_rm:
             df_final = df_final[df_final["rm_str"] == str(buscar_rm).strip()]
         if filtro_req != "Todos":
@@ -240,26 +219,24 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             mapa_invertido = {"Aprovado": "A", "Em Aprovação": "E", "Reprovado": "R"}
             df_final = df_final[df_final["status_pc"].astype(str).str.strip().str.upper() == mapa_invertido[filtro_status_pc].upper()]
 
-        if "mat" in df_final.columns and "rm" in df_final.columns:
-            df_final = df_final.drop_duplicates(subset=["rm", "mat"]).copy()
-        else:
-            df_final = df_final.drop_duplicates().copy()
+        # Trava anti-duplicidade em formato string pura
+        df_final["rm_mat_key"] = df_final["rm"].astype(str) + "_" + df_final["mat"].astype(str)
+        df_final = df_final.drop_duplicates(subset=["rm_mat_key"]).copy()
 
-                # ==========================================================
-        # 🚨 7.5 PROCESSAMENTO SEGURO DE DATAS E CÁLCULO DE ATRASO (BLINDADO)
         # ==========================================================
-        # Extraímos séries isoladas nativas da memória forçando NaT (nulo de data) em qualquer erro
+        # 🚨 7.5 PROCESSAMENTO SEGURO DE DATAS E CÁLCULO DE ATRASO
+        # ==========================================================
+        # Extraímos séries isoladas nativas da memória forçando NaT (nulo de data) em qualquer texto inválido
         dt_entrega_puro = pd.to_datetime(df_final["entrega"], errors="coerce")
         dt_necessidade_puro = pd.to_datetime(df_final["data_necessidade"], errors="coerce")
         dt_emissao_puro = pd.to_datetime(df_final["data_emissao"], errors="coerce")
 
-        # Criamos uma lista nativa para armazenar as strings calculadas fora do DataFrame
         lista_alertas_data = []
         for idx in df_final.index:
             dt_ent = dt_entrega_puro.loc[idx]
             dt_nec = dt_necessidade_puro.loc[idx]
             
-            if pd.isna(dt_ent) or pd.isna(dt_nec):
+            if pd.isna(dt_ent) or pd.isna(dt_nec) or str(dt_ent) in ["nan", "---"] or str(dt_nec) in ["nan", "---"]:
                 lista_alertas_data.append("Data não informada")
             else:
                 try:
@@ -273,21 +250,18 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                 except Exception:
                     lista_alertas_data.append("Data não informada")
 
-        # Injeta o resultado do cálculo na coluna como tipo texto (object) puro
         df_final["alerta_data"] = lista_alertas_data
 
-        # Filtro de intervalo de período operando de forma 100% isolada e matemática pelos índices puros
+        # Filtro de intervalo de período operando de forma 100% isolada e cronológica
         if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2:
             try:
-                data_inicio = pd.to_datetime(filtro_periodo[0])
-                data_fim = pd.to_datetime(filtro_periodo[1])
-                
-                if pd.notna(data_inicio) and pd.notna(data_fim):
-                    # Filtra os índices que atendem à regra cronológica no vetor isolado
+                d_ini = filtro_periodo
+                d_fim = filtro_periodo
+                if pd.notna(d_ini) and pd.notna(d_fim):
+                    data_inicio = pd.to_datetime(d_ini)
+                    data_fim = pd.to_datetime(d_fim)
                     indices_validos = df_final.index[(dt_emissao_puro >= data_inicio) & (dt_emissao_puro <= data_fim)]
                     df_final = df_final.loc[indices_validos].copy()
-                    
-                    # Atualiza os vetores de pintura correspondentes para não desalinharem na Etapa 9
                     dt_entrega_puro = dt_entrega_puro.loc[indices_validos]
                     dt_necessidade_puro = dt_necessidade_puro.loc[indices_validos]
             except Exception:
@@ -297,31 +271,30 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             st.warning("⚠️ Nenhum registro corresponde aos critérios selecionados.")
             st.stop()
 
-        # Guardamos cópias estáveis dos vetores datetime puros para a pintura de linhas na Etapa 9
         df_final["entrega_original_dt"] = dt_entrega_puro
         df_final["necessidade_original_dt"] = dt_necessidade_puro
 
-        # ==========================================================
+                # ==========================================================
         # 📊 8. MAPEAMENTO, TRADUÇÃO E TEXTOS AMIGÁVEIS NAS COLUNAS
         # ==========================================================
         mapa_status_extenso = {"A": "Aprovado", "E": "Em Aprovação", "R": "Reprovado", "---": "---"}
         
         if "status_documento" in df_final.columns:
             df_final["status_documento"] = df_final["status_documento"].map(
-                lambda x: mapa_status_extenso.get(str(x).strip().upper(), "---") if pd.notna(x) else "---"
+                lambda x: mapa_status_extenso.get(str(x).strip().upper(), "---") 
+                if pd.notna(x) and str(x) not in ["nan", "None", "---"] else "---"
             )
         if "status_pc" in df_final.columns:
             df_final["status_pc"] = df_final["status_pc"].map(
-                lambda x: mapa_status_extenso.get(str(x).strip().upper(), "---") if pd.notna(x) else "---"
+                lambda x: mapa_status_extenso.get(str(x).strip().upper(), "---") 
+                if pd.notna(x) and str(x) not in ["nan", "None", "---"] else "---"
             )
 
-        if "qtd_solicitada" in df_final.columns:
-            df_final["qtd_solicitada"] = pd.to_numeric(df_final["qtd_solicitada"], errors="coerce").fillna(0).astype(int)
-        if "quantidade_comprada" in df_final.columns:
-            df_final["quantidade_comprada"] = pd.to_numeric(df_final["quantidade_comprada"], errors="coerce").fillna(0).astype(int)
+        # Trata inteiros limpando strings nulas
+        df_final["qtd_solicitada"] = pd.to_numeric(df_final["qtd_solicitada"], errors="coerce").fillna(0).astype(int)
+        df_final["quantidade_comprada"] = pd.to_numeric(df_final["quantidade_comprada"], errors="coerce").fillna(0).astype(int)
 
-        # 🚨 DESTRUIÇÃO DE DTYPE: Forçamos as colunas visuais a virarem strings de texto comuns (tipo 'object').
-        # Fazendo isso de forma explícita por loop, o Pandas apaga a assinatura de data nativa e elimina o erro.
+        # Formatação visual definitiva de strings na tabela com tipo TEXTO PURO (object) garantido
         colunas_de_data = ["data_emissao", "data_necessidade", "entrega", "data_ocorrencia", "data_ocorrencia_pc"]
         for col in colunas_de_data:
             if col in df_final.columns:
@@ -331,13 +304,20 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                 else:
                     df_final[col] = convertido.dt.strftime("%d/%m/%Y").fillna("Data não informada").astype(str)
 
-        # Preenche lacunas de texto órfãs geradas pelo Outer Join
-        df_final["nome_solicitante"] = df_final["nome_solicitante"].fillna("RM Sem Fluxo Approvo").astype(str)
-        df_final["desc_item"] = df_final["desc_item"].fillna("Direto p/ Compras").astype(str)
+        df_final["nome_solicitante"] = df_final["nome_solicitante"].apply(
+            lambda x: "RM Sem Fluxo Approvo" 
+            if pd.isna(x) or str(x).strip() in ["", "nan", "None", "---"] else x
+        ).astype(str)
+        
+        df_final["desc_item"] = df_final["desc_item"].apply(
+            lambda x: "Direto p/ Compras" 
+            if pd.isna(x) or str(x).strip() in ["", "nan", "None", "---"] else x
+        ).astype(str)
 
-        # Tratamento final e unificado de nulos residuais genéricos de texto
+        # Tratamento final de nulos genéricos de texto
         df_final.fillna("---", inplace=True)
         df_final.replace("nan", "---", inplace=True)
+        df_final.replace("None", "---", inplace=True)
 
         # Estrutura do Dicionário de MultiIndex (Super Cabeçalho Agrupado)
         colunas_multi_index = {
@@ -369,7 +349,6 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         colunas_existentes = [col for col in colunas_multi_index.keys() if col in df_final.columns]
         df_exibicao = df_final[colunas_existentes].copy()
         df_exibicao.columns = pd.MultiIndex.from_tuples([colunas_multi_index[c] for c in colunas_existentes])
-
 
                 # ==========================================================
         # 🎨 9. LAYOUT CROMÁTICO (PALETA PASTEL COMPLETA ATUALIZADA)
