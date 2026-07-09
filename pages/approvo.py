@@ -151,79 +151,70 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             st.stop()
 
             # ==========================================================
-            # 🔄 7. LOGÍSTICA DE UNIFICAÇÃO (MERGE INVERSO: PC COMO BASE)
-            # ==========================================================
-            # 1. Prepara e limpa a tabela base de Pedidos de Compra (PC)
-            if not df_pc_bruto.empty:
-                df_pc_bruto["pedido_str"] = df_pc_bruto["pedido"].fillna("").astype(str).str.split('.').str[0].str.strip()
-                df_pc_bruto["mat_str"] = df_pc_bruto["mat"].fillna("").astype(str).str.split('.').str[0].str.strip()
-                
-                colunas_vitais_pc = ["pedido_str", "mat_str", "nome_solicitante", "entrega", "quantidade", "status_documento", "data_ocorrencia", "nome_aprovador"]
-                colunas_existentes_pc = [c for c in colunas_vitais_pc if c in df_pc_bruto.columns]
-                
-                df_pc_base = df_pc_bruto[colunas_existentes_pc].drop_duplicates().copy()
-                df_pc_base.rename(columns={
-                    "nome_solicitante": "comprador",
-                    "status_documento": "status_pc",
-                    "data_oficial_ocorrencia": "data_ocorrencia_pc",
-                    "data_ocorrencia": "data_ocorrencia_pc",
-                    "nome_aprovador": "nome_aprovador_pc",
-                    "quantidade": "quantidade_comprada"
-                }, inplace=True, errors="ignore")
-            else:
-                df_pc_base = pd.DataFrame(columns=["pedido_str", "mat_str", "comprador", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"])
+        # 🔄 7. LOGÍSTICA DE UNIFICAÇÃO (MERGE INVERSO: PC COMO BASE)
+        # ==========================================================
+        if not df_pc_bruto.empty:
+            df_pc_bruto["pedido_str"] = df_pc_bruto["pedido"].fillna("").astype(str).str.split('.').str.str.strip()
+            df_pc_bruto["mat_str"] = df_pc_bruto["mat"].fillna("").astype(str).str.split('.').str.str.strip()
+            
+            colunas_vitais_pc = ["pedido_str", "mat_str", "nome_solicitante", "entrega", "quantidade", "status_documento", "data_ocorrencia", "nome_aprovador"]
+            colunas_existentes_pc = [c for c in colunas_vitais_pc if c in df_pc_bruto.columns]
+            
+            df_pc_base = df_pc_bruto[colunas_existentes_pc].drop_duplicates().copy()
+            df_pc_base.rename(columns={
+                "nome_solicitante": "comprador",
+                "status_documento": "status_pc",
+                "data_oficial_ocorrencia": "data_ocorrencia_pc",
+                "data_ocorrencia": "data_ocorrencia_pc",
+                "nome_aprovador": "nome_aprovador_pc",
+                "quantidade": "quantidade_comprada"
+            }, inplace=True, errors="ignore")
+        else:
+            df_pc_base = pd.DataFrame(columns=["pedido_str", "mat_str", "comprador", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"])
 
-            # 2. Prepara e limpa a tabela de vínculo intermediária
-            if not df_vinculo.empty:
-                df_vinculo["rm_str"] = df_vinculo["rm"].fillna("").astype(str).str.split('.').str[0].str.strip()
-                df_vinculo["pedido_str"] = df_vinculo["pedido"].fillna("").astype(str).str.split('.').str[0].str.strip()
-                
-                # Junta o Pedido Base com o número da RM que ele gerou
-                df_pc_consolidado = pd.merge(df_pc_base, df_vinculo[["pedido_str", "rm_str"]], on="pedido_str", how="left")
-            else:
-                df_pc_consolidado = df_pc_base.copy()
-                df_pc_consolidado["rm_str"] = ""
+        if not df_vinculo.empty:
+            df_vinculo["rm_str"] = df_vinculo["rm"].fillna("").astype(str).str.split('.').str.str.strip()
+            df_vinculo["pedido_str"] = df_vinculo["pedido"].fillna("").astype(str).str.split('.').str.str.strip()
+            df_pc_consolidado = pd.merge(df_pc_base, df_vinculo[["pedido_str", "rm_str"]], on="pedido_str", how="left")
+        else:
+            df_pc_consolidado = df_pc_base.copy()
+            df_pc_consolidado["rm_str"] = ""
 
-            # 3. Prepara a tabela de RMs da vw_approvo_rm
-            if not df_rm_bruto.empty:
-                df_rm_bruto["rm_str"] = df_rm_bruto["rm"].fillna("").astype(str).str.split('.').str[0].str.strip()
-                df_rm_bruto["mat_str"] = df_rm_bruto["mat"].fillna("").astype(str).str.split('.').str[0].str.strip()
-                
-                colunas_vitais_rm = ["nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "rm_str", "mat_str"]
-                colunas_existentes_rm = [c for c in colunas_vitais_rm if c in df_rm_bruto.columns]
-                df_rm_limpo = df_rm_bruto[colunas_existentes_rm].drop_duplicates().copy()
-                
-                # 🚨 CRUZAMENTO SEGURO INVERSO: Acopla os dados da RM ao lado do Pedido de Compra
-                df_final = pd.merge(df_pc_consolidado, df_rm_limpo, on=["rm_str", "mat_str"], how="left")
-            else:
-                df_final = df_pc_consolidado.copy()
-                for col in ["nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador"]:
-                    df_final[col] = None
+        if not df_rm_bruto.empty:
+            df_rm_bruto["rm_str"] = df_rm_bruto["rm"].fillna("").astype(str).str.split('.').str.str.strip()
+            df_rm_bruto["mat_str"] = df_rm_bruto["mat"].fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
+            
+            colunas_vitais_rm = ["nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "rm_str", "mat_str"]
+            colunas_existentes_rm = [c for c in colunas_vitais_rm if c in df_rm_bruto.columns]
+            df_rm_limpo = df_rm_bruto[colunas_existentes_rm].drop_duplicates().copy()
+            
+            df_final = pd.merge(df_pc_consolidado, df_rm_limpo, on=["rm_str", "mat_str"], how="left")
+        else:
+            df_final = df_pc_consolidado.copy()
+            for col in ["nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador"]:
+                df_final[col] = None
 
-            # 🚨 TRAVA DE TRATAMENTO EXTRA: Se o pedido existe mas a RM pulou o Approvo, preenche colunas verdes de forma amigável
-            df_final["rm"] = df_final["rm"].fillna(df_final["rm_str"])
-            df_final["mat"] = df_final["mat"].fillna(df_final["mat_str"])
-            df_final["nome_solicitante"] = df_final["nome_solicitante"].fillna("RM Sem Fluxo Approvo")
-            df_final["desc_item"] = df_final["desc_item"].fillna("Direto p/ Compras")
+        df_final["rm"] = df_final["rm"].fillna(df_final["rm_str"])
+        df_final["mat"] = df_final["mat"].fillna(df_final["mat_str"])
+        df_final["nome_solicitante"] = df_final["nome_solicitante"].fillna("RM Sem Fluxo Approvo")
+        df_final["desc_item"] = df_final["desc_item"].fillna("Direto p/ Compras")
 
-            # Aplica as travas secundárias de filtros combinados rígidos na tela
-            if buscar_rm:
-                df_final = df_final[df_final["rm_str"] == str(buscar_rm).strip()]
-            if filtro_req != "Todos":
-                df_final = df_final[df_final["nome_solicitante"].astype(str).str.strip() == str(filtro_req).strip()]
-            if filtro_status_rm != "Todos":
-                mapa_invertido = {"Aprovado": "A", "Em Aprovação": "E", "Reprovado": "R"}
-                df_final = df_final[df_final["status_documento"].astype(str).str.strip() == mapa_invertido[filtro_status_rm]]
+        if buscar_rm:
+            df_final = df_final[df_final["rm_str"] == str(buscar_rm).strip()]
+        if filtro_req != "Todos":
+            df_final = df_final[df_final["nome_solicitante"].astype(str).str.strip() == str(filtro_req).strip()]
+        if filtro_status_rm != "Todos":
+            mapa_invertido = {"Aprovado": "A", "Em Aprovação": "E", "Reprovado": "R"}
+            df_final = df_final[df_final["status_documento"].astype(str).str.strip() == mapa_invertido[filtro_status_rm]]
 
-            # Remove linhas duplicadas geradas pelo histórico final
-            if "mat" in df_final.columns and "rm" in df_final.columns:
-                df_final = df_final.drop_duplicates(subset=["rm", "mat"]).copy()
-            else:
-                df_final = df_final.drop_duplicates().copy()
+        if "mat" in df_final.columns and "rm" in df_final.columns:
+            df_final = df_final.drop_duplicates(subset=["rm", "mat"]).copy()
+        else:
+            df_final = df_final.drop_duplicates().copy()
+
         # ==========================================================
         # 🚨 7.5 PROCESSAMENTO SEGURO DE DATAS E CÁLCULO DE ATRASO
         # ==========================================================
-        # Criamos vetores isolados em formato datetime puro forçando NaT em qualquer string inválida
         dt_entrega_puro = pd.to_datetime(df_final["entrega"], errors="coerce")
         dt_necessidade_puro = pd.to_datetime(df_final["data_necessidade"], errors="coerce")
         dt_emissao_puro = pd.to_datetime(df_final["data_emissao"], errors="coerce")
@@ -231,41 +222,35 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         def calcular_atraso_seguro(idx):
             dt_ent = dt_entrega_puro.loc[idx]
             dt_nec = dt_necessidade_puro.loc[idx]
-            
             if pd.isna(dt_ent) or pd.isna(dt_nec):
                 return "Data não informada"
-                
             try:
                 diferenca = (dt_ent - dt_nec).days
                 if diferenca > 0:
                     return f"Atraso de {diferenca} dias"
+                elif diferenca < 0:
+                    return f"Adiantado {abs(diferenca)} dias"
                 return "No prazo"
             except Exception:
                 return "Data não informada"
 
-        # Executa o cálculo usando os índices mapeados das séries isoladas
         df_final["alerta_data"] = df_final.index.map(calcular_atraso_seguro)
 
-        # Filtro de intervalo de período operando de forma 100% isolada e matemática pelos índices
         if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2:
-            # 🔍 FIX DEFINITIVO: Extrai os dois valores e valida se não são nulos antes de rodar o merge horizontal
             d_ini = filtro_periodo[0]
             d_fim = filtro_periodo[1]
-            
             if pd.notna(d_ini) and pd.notna(d_fim):
                 data_inicio = pd.to_datetime(d_ini)
                 data_fim = pd.to_datetime(d_fim)
-                
-                # Aplica o filtro de intervalo usando os índices estáveis do vetor isolado na memória
                 indices_validos = df_final.index[(dt_emissao_puro >= data_inicio) & (dt_emissao_puro <= data_fim)]
                 df_final = df_final.loc[indices_validos].copy()
 
         if df_final.empty:
             st.warning("⚠️ Nenhum registro corresponde aos critérios selecionados.")
             st.stop()
-        # Guardamos cópias estáveis dos vetores datetime puros para a pintura de linhas na Etapa 9
-        #df_final["entrega_original_dt"] = pd.to_datetime(df_final["entrega"], errors="coerce")
-        #df_final["necessidade_original_dt"] = pd.to_datetime(df_final["data_necessidade"], errors="coerce")
+
+        df_final["entrega_original_dt"] = pd.to_datetime(df_final["entrega"], errors="coerce")
+        df_final["necessidade_original_dt"] = pd.to_datetime(df_final["data_necessidade"], errors="coerce")
 
         # ==========================================================
         # 📊 8. MAPEAMENTO, TRADUÇÃO E PROCESSAMENTO COMPLETO DE STRINGS
@@ -286,25 +271,18 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         if "quantidade_comprada" in df_final.columns:
             df_final["quantidade_comprada"] = pd.to_numeric(df_final["quantidade_comprada"], errors="coerce").fillna(0).astype(int)
 
-        # 🚨 SOLUÇÃO REAL CONTRA O ERRO DE DTYPE:
-        # Antes de injetar textos amigáveis, forçamos as colunas de data a virarem strings comuns (tipo 'object').
-        # Isso remove a tipagem datetime64 nativa e impede o Pandas de lançar exceções.
         colunas_de_data = ["data_emissao", "data_necessidade", "entrega", "data_ocorrencia", "data_ocorrencia_pc"]
         for col in colunas_de_data:
             if col in df_final.columns:
-                # Converte os valores brutos para data e depois gera a string formatada de forma segura
                 convertido = pd.to_datetime(df_final[col], errors="coerce")
-                
                 if col in ["data_ocorrencia", "data_ocorrencia_pc"]:
                     df_final[col] = convertido.dt.strftime("%d/%m/%Y %H:%M").fillna("Data não informada").astype(str)
                 else:
                     df_final[col] = convertido.dt.strftime("%d/%m/%Y").fillna("Data não informada").astype(str)
 
-        # Tratamento final de nulos genéricos para as demais colunas de texto (Apenas no final!)
         df_final.fillna("---", inplace=True)
         df_final.replace("nan", "---", inplace=True)
 
-        # Estrutura do Dicionário de MultiIndex (Super Cabeçalho Agrupado)
         colunas_multi_index = {
             "nome_solicitante":   ("REQUISICAO DE MATERIAL MEGA", "Requisitante"),
             "rm":                 ("REQUISICAO DE MATERIAL MEGA", "Nr. RM"),
@@ -334,7 +312,6 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         colunas_existentes = [col for col in colunas_multi_index.keys() if col in df_final.columns]
         df_exibicao = df_final[colunas_existentes].copy()
         df_exibicao.columns = pd.MultiIndex.from_tuples([colunas_multi_index[c] for c in colunas_existentes])
-
                 # ==========================================================
         # 🎨 9. LAYOUT CROMÁTICO (PALETA PASTEL COMPLETA ATUALIZADA)
         # ==========================================================
