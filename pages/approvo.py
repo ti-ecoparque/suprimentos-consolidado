@@ -158,7 +158,7 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                 # ==========================================================
         # 🔄 7. LOGÍSTICA DE UNIFICAÇÃO (BLINDAGEM ESTRUTURAL DE COLUNAS)
         # ==========================================================
-        # 🚨 LISTA PADRÃO CRÍTICA EQUALIZADA: Possui exatamente 20 elementos para zerar o Length mismatch
+        # Lista padrão utilizada para inicializar estruturas vazias sem quebrar eixos
         todas_colunas_vitais = [
             "nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", 
             "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", 
@@ -166,7 +166,7 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"
         ]
 
-        # 1. Tratamento da tabela de RMs
+        # 1. Tratamento e Isolamento da tabela de RMs
         if not df_rm_bruto.empty:
             for c in df_rm_bruto.columns:
                 df_rm_bruto[c] = df_rm_bruto[c].astype(str).str.replace('.0', '', regex=False).str.strip()
@@ -174,14 +174,12 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             df_rm_bruto["mat_str"] = df_rm_bruto.get("mat", "---")
             df_rm_limpo = df_rm_bruto.drop_duplicates().copy()
         else:
-            # 🚨 FIX CIRÚRGICO: Cria as colunas com a lista exata de 20 elementos
             df_rm_limpo = pd.DataFrame(columns=todas_colunas_vitais)
 
-        # Garantia de colunas na RM limpa
         if "rm_str" not in df_rm_limpo.columns: df_rm_limpo["rm_str"] = "---"
         if "mat_str" not in df_rm_limpo.columns: df_rm_limpo["mat_str"] = "---"
 
-        # 2. Tratamento da tabela de Vínculos
+        # 2. Tratamento e Isolamento da tabela de Vínculos Intermediários
         if not df_vinculo.empty:
             for c in df_vinculo.columns:
                 df_vinculo[c] = df_vinculo[c].astype(str).str.replace('.0', '', regex=False).str.strip()
@@ -195,30 +193,35 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         if "pedido_str" not in df_rm_consolidada.columns: df_rm_consolidada["pedido_str"] = "---"
         if "mat_str" not in df_rm_consolidada.columns: df_rm_consolidada["mat_str"] = "---"
 
-        # 3. Tratamento da tabela de Pedidos (PC)
+        # 3. Tratamento e Isolamento da tabela de Pedidos (PC)
         if not df_pc_bruto.empty:
             for c in df_pc_bruto.columns:
                 df_pc_bruto[c] = df_pc_bruto[c].astype(str).str.replace('.0', '', regex=False).str.strip()
+            
             df_pc_bruto["pedido_str"] = df_pc_bruto.get("pedido", "---")
             df_pc_bruto["mat_str"] = df_pc_bruto.get("mat", "---")
-            
             df_pc_limpo = df_pc_bruto.drop_duplicates().copy()
-            df_pc_limpo.rename(columns={
+            
+            # 🚨 CORREÇÃO DEFINITIVA DO RENAME: Traduz os campos um por um de forma segura
+            # Sem mapear por posições fixas de eixos para eliminar o Length Mismatch
+            mapa_colunas_pc = {
                 "nome_solicitante": "comprador",
                 "status_documento": "status_pc",
                 "data_oficial_ocorrencia": "data_ocorrencia_pc",
                 "data_ocorrencia": "data_ocorrencia_pc",
                 "nome_aprovador": "nome_aprovador_pc",
                 "quantidade": "quantidade_comprada"
-            }, inplace=True, errors="ignore")
+            }
+            #Filtra apenas as colunas que realmente existem na tabela antes de renomear
+            mapa_existente = {k: v for k, v in mapa_colunas_pc.items() if k in df_pc_limpo.columns}
+            df_pc_limpo.rename(columns=mapa_existente, inplace=True)
         else:
-            # 🚨 FIX CIRÚRGICO: Cria as colunas com a lista exata de 20 elements
             df_pc_limpo = pd.DataFrame(columns=todas_colunas_vitais)
 
         if "pedido_str" not in df_pc_limpo.columns: df_pc_limpo["pedido_str"] = "---"
         if "mat_str" not in df_pc_limpo.columns: df_pc_limpo["mat_str"] = "---"
 
-        # Força chaves para string limpa antes do merge
+        # Força as chaves a virarem strings limpas antes da união
         df_rm_consolidada["pedido_str"] = df_rm_consolidada["pedido_str"].astype(str).str.strip()
         df_rm_consolidada["mat_str"] = df_rm_consolidada["mat_str"].astype(str).str.strip()
         df_pc_limpo["pedido_str"] = df_pc_limpo["pedido_str"].astype(str).str.strip()
@@ -227,13 +230,14 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         # 🔥 OUTER JOIN COMPLETO INFALÍVEL SINCRO
         df_final = pd.merge(df_rm_consolidada, df_pc_limpo, on=["pedido_str", "mat_str"], how="outer")
 
-        # Garante a existência de todas as colunas necessárias pós-merge para evitar quebras adiante
+        # Garante a existência de todas as colunas necessárias pós-merge para evitar quebras de dicionário
         for col in todas_colunas_vitais:
             if col not in df_final.columns:
                 df_final[col] = "---"
 
         df_final["rm"] = df_final["rm"].fillna(df_final["rm_str"])
         df_final["mat"] = df_final["mat"].fillna(df_final["mat_str"])
+
 
 
         # ==========================================================
