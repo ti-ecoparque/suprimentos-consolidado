@@ -152,9 +152,10 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             df_rm_bruto = pd.DataFrame([{"rm": int(buscar_rm)}])
 
         if df_pc_bruto.empty and df_rm_bruto.empty:
-            st.warning("⚠️ Nenhum registro correspondente aos critérios selecionados.")
-            st.stop()
-
+            # Em vez de st.stop(), criamos uma variável de aviso para parar o código fora do spinner
+            tabela_vazia_banco = True
+        else:
+            tabela_vazia_banco = False
                 # ==========================================================
         # 🔄 7. LOGÍSTICA DE UNIFICAÇÃO (BLINDAGEM ESTRUTURAL DE COLUNAS)
         # ==========================================================
@@ -240,15 +241,13 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
 
 
 
+                # ==========================================================
+        # 🚨 7.5 PROCESSAMENTO SEGURO DE DATAS E CÁLCULO DE ATRASO
         # ==========================================================
-        # 🚨 7.5 PROCESSAMENTO SEGURO DE DATAS E CÁLCULO DE ATRASO (100% PYTHON NATIVO)
-        # ==========================================================
-        import datetime
-
-        # Listas nativas isoladas para garantir estabilidade e imunidade contra dtypes do Pandas
         lista_alertas_data = []
         lista_entrega_dt_bruta = []
         lista_necessidade_dt_bruta = []
+        lista_dt_emissao_puro = []
         indices_para_manter = []
 
         # Convertemos os filtros do calendário do Streamlit para objetos date nativos do Python
@@ -269,15 +268,12 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             dt_nec = None
             dt_emi = None
             
-            # Função auxiliar interna para converter qualquer string ou timestamp do Supabase em date nativo
             def converter_para_data_nativa(valor):
                 if pd.isna(valor) or str(valor).strip() in ["", "---", "nan", "None", "NaT"]:
                     return None
                 try:
-                    # Se já for um timestamp ou datetime do pandas, extrai a data nativa
                     if hasattr(valor, "date"):
                         return valor.date()
-                    # Se for string formatada ou ISO, tenta realizar o parse seguro
                     t_str = str(valor).strip().split(" ")[0]
                     if "-" in t_str:
                         return datetime.datetime.strptime(t_str, "%Y-%m-%d").date()
@@ -291,16 +287,16 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             dt_nec = converter_para_data_nativa(val_necessidade)
             dt_emi = converter_para_data_nativa(val_emissao)
 
-            # 1. Aplica o filtro de Intervalo de Período de forma nativa e isolada (Mata o erro do print)
+            # Aplica o filtro de Intervalo de Período de forma nativa e isolada
             if data_inicio_filtro and data_fim_filtro:
                 if dt_emi is None or not (data_inicio_filtro <= dt_emi <= data_fim_filtro):
-                    continue # Descarta a linha antes de gastar processamento
+                    continue 
 
             indices_para_manter.append(idx)
             lista_entrega_dt_bruta.append(dt_ent)
             lista_necessidade_dt_bruta.append(dt_nec)
+            lista_dt_emissao_puro.append(dt_emi)
 
-            # 2. Lógica matemática de atraso/adiantamento sem dtypes
             if dt_ent is None or dt_nec is None:
                 lista_alertas_data.append("Data não informada")
             else:
@@ -312,13 +308,31 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                 else:
                     lista_alertas_data.append("No prazo")
 
-        # Filtra o DataFrame mantendo apenas as linhas que sobreviveram ao processamento nativo
+        # Filtra o DataFrame com base no fatiamento nativo
         df_final = df_final.loc[indices_para_manter].copy()
         df_final["alerta_data"] = lista_alertas_data
+        
+        # Converte as listas nativas em Series temporárias estáveis
+        dt_emissao_puro = pd.Series(lista_dt_emissao_puro, index=df_final.index)
+        dt_entrega_puro = pd.Series(lista_entrega_dt_bruta, index=df_final.index)
+        dt_necessidade_puro = pd.Series(lista_necessidade_dt_bruta, index=df_final.index)
 
-        if df_final.empty:
-            st.warning("⚠️ Nenhum registro corresponde aos critérios selecionados no período.")
-            st.stop()
+        # Guarda as séries em colunas de controle interno para o Layout Cromático (Etapa 9)
+        df_final["entrega_original_dt"] = dt_entrega_puro
+        df_final["necessidade_original_dt"] = dt_necessidade_puro
+
+    except Exception as e:
+        st.error(f"❌ Erro crítico ao consolidar as visões no Cenário D: {e}")
+        st.stop()
+
+# ==========================================================
+# 🚨 VALIDAÇÃO ADICIONAL DE LINHAS (FORA DO RECUO DO SPINNER)
+# ==========================================================
+# Ao rodar aqui na margem zero, o indicador azul desliga antes de parar a tela!
+if df_final.empty:
+    st.warning("⚠️ Nenhum registro corresponde aos critérios selecionados no período filtrado.")
+    st.stop()
+
 
         # ==========================================================
         # 📊 8. MAPEAMENTO, TRADUÇÃO E PROCESSAMENTO COMPLETO DE STRINGS Visuais
