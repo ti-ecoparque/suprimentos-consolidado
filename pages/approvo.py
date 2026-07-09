@@ -362,21 +362,23 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         df_exibicao = df_final[colunas_existentes].copy()
         df_exibicao.columns = pd.MultiIndex.from_tuples([colunas_multi_index[c] for c in colunas_existentes])
 
-        # ==========================================================
-        # 🎨 9. LAYOUT CROMÁTICO (PALETA PASTEL COMPLETA)
+                # ==========================================================
+        # 🎨 9. LAYOUT CROMÁTICO (PALETA PASTEL COMPLETA ATUALIZADA)
         # ==========================================================
         def aplicar_cores_corpo(df):
             estilos = pd.DataFrame('', index=df.index, columns=df.columns)
             for col in df.columns:
-                grupo = col # Nível 0 do MultiIndex (Super Cabeçalho)
+                grupo = col[0] # Nível 0 do MultiIndex (Super Cabeçalho)
                 
                 for i in df.index:
                     alerta = str(df_final.loc[i, "alerta_data"]).lower()
                     tem_atraso = "atraso" in alerta
                     
                     if tem_atraso:
-                        estilos.at[i, col] = 'background-color: #fce4d6; color: #000000;' # Vermelho claro para atrasos
+                        # Se houver atraso, aplica o Vermelho Pastel Suave na linha
+                        estilos.at[i, col] = 'background-color: #fce4d6; color: #000000;'
                     else:
+                        # Se estiver no prazo, segue a identidade cromática do Excel
                         if grupo == "REQUISICAO DE MATERIAL MEGA":
                             estilos.at[i, col] = 'background-color: #f2f7f2; color: #000000;'
                         elif grupo == "APPROVAL (RM)":
@@ -384,28 +386,41 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                         elif grupo == "PEDIDO DE COMPRA MEGA":
                             estilos.at[i, col] = 'background-color: #fbf2fa; color: #000000;'
                         elif grupo == "APPROVAL (PC)":
-                            estilos.at[i, col] = 'background-color: #f3daf1; color: #000000;'
+                            st_pc = str(df_final.loc[i, "status_pc"]).upper().strip()
+                            if st_pc in ["A", "APROVADO"]:
+                                estilos.at[i, col] = 'background-color: #f3daf1; color: #000000;'
+                            else:
+                                estilos.at[i, col] = 'background-color: #fbf2fa; color: #000000;'
                             
-                    # Aplica a cor das novas colunas operacionais se não houver atraso na linha
+                    # Regras fixas de destaque se a linha não estiver em atraso
                     if not tem_atraso:
                         if grupo == "SITUAÇÃO DO ITEM":
-                            estilos.at[i, col] = 'background-color: #70ad47; color: #ffffff; font-weight: bold;'
+                            estilos.at[i, col] = 'background-color: #70ad47; color: #ffffff; font-weight: bold; text-align: center;'
                         elif grupo == "ALERTA DE DATA":
-                            estilos.at[i, col] = 'background-color: #fff2cc; color: #000000;'
+                            estilos.at[i, col] = 'background-color: #fff2cc; color: #000000; text-align: center;'
             return estilos
 
+        # Injeta o CSS bruto mapeando a contagem real das colunas na tela (0 a 18)
         st.markdown("""
             <style>
                 th.col_heading.level0 { font-weight: bold !important; color: #000000 !important; text-align: center !important; }
-                th.col_heading.level0.id0_6 { background-color: #e2f0d9 !important; }
-                th.col_heading.level0.id7_9 { background-color: #a9d08e !important; }
-                th.col_heading.level0.id10_13 { background-color: #f2dcfa !important; }
-                th.col_heading.level0.id14_16 { background-color: #df9ff2 !important; }
-                th.col_heading.level0.id17 { background-color: #548235 !important; color: #ffffff !important; }
-                th.col_heading.level0.id18 { background-color: #ffe599 !important; }
+                
+                /* Mapeamento milimétrico das larguras das seções coloridas superiores */
+                th.col_heading.level0.id0_6 { background-color: #e2f0d9 !important; }   /* REQUISICAO DE MATERIAL MEGA (7 colunas) */
+                th.col_heading.level0.id7_9 { background-color: #a9d08e !important; }   /* APPROVAL (RM) (3 colunas) */
+                th.col_heading.level0.id10_13 { background-color: #f2dcfa !important; } /* PEDIDO DE COMPRA MEGA (4 colunas) */
+                th.col_heading.level0.id14_16 { background-color: #df9ff2 !important; } /* APPROVAL (PC) (3 colunas) */
+                
+                /* Novas colunas operacionais no final */
+                th.col_heading.level0.id17 { background-color: #548235 !important; color: #ffffff !important; } /* SITUAÇÃO DO ITEM */
+                th.col_heading.level0.id18 { background-color: #ffe599 !important; }   /* ALERTA DE DATA */
+                
+                /* Centraliza os títulos da linha inferior para acompanhar o Excel */
+                th.col_heading.level1 { text-align: center !important; }
             </style>
         """, unsafe_allow_html=True)
 
+        # Renderiza a tabela definitiva perfeitamente estilizada
         df_estilizado = df_exibicao.style.apply(aplicar_cores_corpo, axis=None)
         st.dataframe(df_estilizado, use_container_width=True, hide_index=True)
 
