@@ -93,11 +93,11 @@ if not tem_filtro_ativo:
     st.stop()
 
 # ==========================================================
-# 🚀 6. CONSTRUÇÃO DA QUERY INTELIGENTE INDEPENDENTE (FULL COMPARTILHADO)
+# 🚀 6. CONSTRUÇÃO DA QUERY INTELIGENTE INDEPENDENTE (INTERCEPTADOR DE JSON)
 # ==========================================================
 with st.spinner("Buscando e cruzando visões comerciais..."):
     try:
-        # 📐 A. BUSCA NA VIEW DE REQUISIÇÕES (RM) - Traz as RMs baseadas nos filtros
+        # 📐 A. BUSCA NA VIEW DE REQUISIÇÕES (RM)
         query_rm = supabase.table("vw_approvo_rm").select("*")
         if buscar_rm:
             query_rm = query_rm.eq("rm", str(buscar_rm))
@@ -108,10 +108,22 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             query_rm = query_rm.eq("status_documento", mapa_invertido[filtro_status_rm])
             
         res_rm = query_rm.limit(500).execute()
-        df_rm_bruto = pd.DataFrame(res_rm.data)
+        
+        # 🚨 INTERCEPTADOR ANTI-ERRO RM: Limpa dados temporais corrompidos antes do Pandas ler
+        dados_rm_limpos = []
+        colunas_data_rm = ["data_emissao", "data_necessidade", "data_ocorrencia"]
+        for linha in res_rm.data:
+            linha_copia = linha.copy()
+            for col in colunas_data_rm:
+                if col in linha_copia:
+                    v = str(linha_copia[col]).strip()
+                    if v in ["", "---", "nan", "None", "NaT"]:
+                        linha_copia[col] = None # Força None puro para o Pandas aceitar como nulo legítimo
+            dados_rm_limpos.append(linha_copia)
+            
+        df_rm_bruto = pd.DataFrame(dados_rm_limpos)
 
         # 📐 B. BUSCA NA TABELA DE VÍNCULO PEDIDO_COMPRA
-        # Extrai as RMs localizadas para ver se elas já possuem vínculos com pedidos
         lista_rms_encontradas = []
         if not df_rm_bruto.empty and "rm" in df_rm_bruto.columns:
             lista_rms_encontradas = [int(float(x)) for x in df_rm_bruto["rm"].unique() if pd.notna(x)]
@@ -125,7 +137,6 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         res_vinculo = query_vinculo.execute()
         df_vinculo = pd.DataFrame(res_vinculo.data)
 
-        # Coleta os IDs de pedidos vinculados
         lista_peds_vinculados = []
         if not df_vinculo.empty and "pedido" in df_vinculo.columns:
             lista_peds_vinculados = [str(int(float(x))) for x in df_vinculo["pedido"].unique() if pd.notna(x)]
@@ -133,7 +144,6 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         # 📐 C. BUSCA NA VIEW DE PEDIDOS (PC)
         query_pc = supabase.table("vw_approvo_pc").select("*")
         
-        # Se veio filtro de comprador ou status de PC, faz busca ampla. Caso contrário, busca cirúrgica pelas pontes.
         if filtro_comp != "Todos" or filtro_status_pc != "Todos":
             if filtro_comp != "Todos":
                 query_pc = query_pc.eq("nome_solicitante", filtro_comp)
@@ -143,16 +153,27 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         elif lista_peds_vinculados:
             query_pc = query_pc.in_("pedido", lista_peds_vinculados)
         else:
-            # Se não há filtros de PC e nem RMs com vínculos, força o PC bruto a ficar vazio para não travar
             query_pc = query_pc.none()
             
         res_pc = query_pc.limit(500).execute()
-        df_pc_bruto = pd.DataFrame(res_pc.data)
+        
+        # 🚨 INTERCEPTADOR ANTI-ERRO PC: Limpa dados temporais corrompidos antes do Pandas ler
+        dados_pc_limpos = []
+        colunas_data_pc = ["entrega", "data_ocorrencia", "data_ocorrencia_pc", "data_oficial_ocorrencia"]
+        for linha in res_pc.data:
+            linha_copia = linha.copy()
+            for col in colunas_data_pc:
+                if col in linha_copia:
+                    v = str(linha_copia[col]).strip()
+                    if v in ["", "---", "nan", "None", "NaT"]:
+                        linha_copia[col] = None # Força None puro para o Pandas aceitar como nulo legítimo
+            dados_pc_limpos.append(linha_copia)
+
+        df_pc_bruto = pd.DataFrame(dados_pc_limpos)
 
         if not df_pc_bruto.empty and "entregas_agendadas" in df_pc_bruto.columns:
             df_pc_bruto.drop(columns=["entregas_agendadas"], inplace=True)
 
-        # Se o usuário digitou uma RM e ela não existe no Approvo, garante a linha base
         if df_rm_bruto.empty and buscar_rm:
             df_rm_bruto = pd.DataFrame([{"rm": int(buscar_rm)}])
 
