@@ -102,7 +102,7 @@ if not tem_filtro_ativo:
     st.stop()
 
 # ==========================================================
-# 🚀 6. CONSTRUÇÃO DA QUERY INTELIGENTE E INDEPENDENTE
+# 🚀 6. CONSTRUÇÃO DA QUERY INTELIGENTE E INDEPENDENTE (BLINDADA)
 # ==========================================================
 with st.spinner("Buscando e cruzando visões comerciais..."):
     try:
@@ -124,12 +124,18 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             st.warning("⚠️ Nenhum registro de RM localizado para os filtros aplicados.")
             st.stop()
 
-        # Extrai a lista de RMs localizadas de forma limpa e segura
+        # 🚨 TRAVA DE SEGURANÇA CONTRA TEXTOS NO NÚMERO DA RM:
         lista_rms_encontradas = []
         if "rm" in df_rm_bruto.columns:
             for r in df_rm_bruto["rm"].unique():
-                if pd.notna(r) and str(r).replace('.0', '').isdigit():
-                    lista_rms_encontradas.append(int(float(r)))
+                if pd.notna(r) and str(r).strip() not in ["", "---", "nan", "None"]:
+                    try:
+                        # Limpa qualquer ponto decimal e garante que armazena apenas número puro
+                        num_limpo = str(r).split('.')[0].strip()
+                        if num_limpo.isdigit():
+                            lista_rms_encontradas.append(int(num_limpo))
+                    except ValueError:
+                        continue
 
         df_vinculo = pd.DataFrame()
         df_pc_bruto = pd.DataFrame()
@@ -140,11 +146,17 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             df_vinculo = pd.DataFrame(res_vinculo.data)
 
         # C. Consulta na visão de Pedidos de Compra (PC)
-        if not df_vinculo.empty:
+        if not df_vinculo.empty and "pedido" in df_vinculo.columns:
+            # 🚨 TRAVA DE SEGURANÇA CONTRA TEXTOS NO NÚMERO DO PEDIDO:
             lista_pedidos = []
             for p in df_vinculo["pedido"].unique():
-                if pd.notna(p) and str(p).replace('.0', '').isdigit():
-                    lista_pedidos.append(str(int(float(p))))
+                if pd.notna(p) and str(p).strip() not in ["", "---", "nan", "None"]:
+                    try:
+                        ped_limpo = str(p).split('.')[0].strip()
+                        if ped_limpo.isdigit():
+                            lista_pedidos.append(ped_limpo)
+                    except ValueError:
+                        continue
             
             if lista_pedidos:
                 query_pc = supabase.table("vw_approvo_pc").select("*").in_("pedido", lista_pedidos)
@@ -161,13 +173,14 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         # ==========================================================
         # 🔄 7. LOGÍSTICA DE UNIFICAÇÃO (MERGE) E TRATAMENTO DE TEXTO (SEGURO)
         # ==========================================================
+        # Eliminamos qualquer .fillna() precoce que possa poluir as colunas antes dos merges do Pandas
         if "rm" in df_rm_bruto.columns:
-            df_rm_bruto["rm_str"] = df_rm_bruto["rm"].fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
+            df_rm_bruto["rm_str"] = df_rm_bruto["rm"].fillna("").astype(str).str.split('.').str[0].str.strip()
         else:
             df_rm_bruto["rm_str"] = ""
 
         if "mat" in df_rm_bruto.columns:
-            df_rm_bruto["mat_str"] = df_rm_bruto["mat"].fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
+            df_rm_bruto["mat_str"] = df_rm_bruto["mat"].fillna("").astype(str).str.split('.').str[0].str.strip()
         else:
             df_rm_bruto["mat_str"] = ""
             
@@ -176,14 +189,14 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         df_rm_limpo = df_rm_bruto[colunas_existentes_rm].drop_duplicates().copy()
         
         if not df_vinculo.empty:
-            df_vinculo["rm_str"] = df_vinculo["rm"].fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
-            df_vinculo["pedido_str"] = df_vinculo["pedido"].fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
+            df_vinculo["rm_str"] = df_vinculo["rm"].fillna("").astype(str).str.split('.').str[0].str.strip()
+            df_vinculo["pedido_str"] = df_vinculo["pedido"].fillna("").astype(str).str.split('.').str[0].str.strip()
             
             df_consolidado = pd.merge(df_rm_limpo, df_vinculo[["rm_str", "pedido_str"]], on="rm_str", how="left")
             
             if not df_pc_bruto.empty:
-                df_pc_bruto["pedido_str"] = df_pc_bruto["pedido"].fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
-                df_pc_bruto["mat_str"] = df_pc_bruto["mat"].fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
+                df_pc_bruto["pedido_str"] = df_pc_bruto["pedido"].fillna("").astype(str).str.split('.').str[0].str.strip()
+                df_pc_bruto["mat_str"] = df_pc_bruto["mat"].fillna("").astype(str).str.split('.').str[0].str.strip()
                 
                 colunas_vitais_pc = ["pedido_str", "mat_str", "nome_solicitante", "entrega", "quantidade", "status_documento", "data_ocorrencia", "nome_aprovador"]
                 colunas_existentes_pc = [c for c in colunas_vitais_pc if c in df_pc_bruto.columns]
@@ -205,6 +218,7 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                 
                 df_final = pd.merge(df_consolidado, df_pc_limpo, on=["pedido_str", "mat_str"], how="left")
                 
+                # Aplicação dos filtros combinados diretamente nas strings do DataFrame consolidado
                 if filtro_comp != "Todos":
                     df_final = df_final[df_final["comprador"].astype(str).str.strip() == str(filtro_comp).strip()]
                 
