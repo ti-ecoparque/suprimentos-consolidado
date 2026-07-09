@@ -321,7 +321,7 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         df_final["entrega_original_dt"] = dt_entrega_puro
         df_final["necessidade_original_dt"] = dt_necessidade_puro
 
-        # ==========================================================
+                # ==========================================================
         # 📊 8. MAPEAMENTO, TRADUÇÃO E PROCESSAMENTO COMPLETO DE STRINGS
         # ==========================================================
         mapa_status_extenso = {"A": "Aprovado", "E": "Em Aprovação", "R": "Reprovado", "---": "---"}
@@ -337,9 +337,11 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                 if pd.notna(x) and str(x) not in ["nan", "None", "---"] else "---"
             )
 
+        # Trata inteiros limpando strings nulas
         df_final["qtd_solicitada"] = pd.to_numeric(df_final["qtd_solicitada"], errors="coerce").fillna(0).astype(int)
         df_final["quantidade_comprada"] = pd.to_numeric(df_final["quantidade_comprada"], errors="coerce").fillna(0).astype(int)
 
+        # Formatação visual definitiva de strings na tabela com tipo TEXTO PURO (object) garantido
         colunas_de_data = ["data_emissao", "data_necessidade", "entrega", "data_ocorrencia", "data_ocorrencia_pc"]
         for col in colunas_de_data:
             if col in df_final.columns:
@@ -349,18 +351,23 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                 else:
                     df_final[col] = convertido.dt.strftime("%d/%m/%Y").fillna("Data não informada").astype(str)
 
-        df_final["nome_solicitante"] = df_final["nome_solicitante"].apply(
-            lambda x: "RM Sem Fluxo Approvo" if pd.isna(x) or str(x).strip() in ["", "nan", "None", "---"] else x
-        ).astype(str)
+        # Garante textos limpos para registros órfãos sem fluxo de Approvo
+        if "nome_solicitante" in df_final.columns:
+            df_final["nome_solicitante"] = df_final["nome_solicitante"].apply(
+                lambda x: "RM Sem Fluxo Approvo" if pd.isna(x) or str(x).strip() in ["", "nan", "None", "---"] else x
+            ).astype(str)
         
-        df_final["desc_item"] = df_final["desc_item"].apply(
-            lambda x: "Direto p/ Compras" if pd.isna(x) or str(x).strip() in ["", "nan", "None", "---"] else x
-        ).astype(str)
+        if "desc_item" in df_final.columns:
+            df_final["desc_item"] = df_final["desc_item"].apply(
+                lambda x: "Direto p/ Compras" if pd.isna(x) or str(x).strip() in ["", "nan", "None", "---"] else x
+            ).astype(str)
 
+        # Tratamento final de nulos genéricos de texto
         df_final.fillna("---", inplace=True)
         df_final.replace("nan", "---", inplace=True)
         df_final.replace("None", "---", inplace=True)
 
+        # 🚨 DICIONÁRIO DE EIXOS CRÍTICOS EXATOS (17 ELEMENTOS VISUAIS)
         colunas_multi_index = {
             "nome_solicitante":   ("REQUISICAO DE MATERIAL MEGA", "Requisitante"),
             "rm":                 ("REQUISICAO DE MATERIAL MEGA", "Nr. RM"),
@@ -387,11 +394,12 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             "alerta_data":        ("ALERTA DE DATA", "Alerta de Entrega")
         }
 
+        # 🔍 FILTRO SEGURO DE ORDEM: Garante que apenas colunas mapeadas no dicionário entrem no DataFrame final!
+        # Isso joga fora colunas temporárias de texto (como 'rm_mat_key') impedindo o erro de Length mismatch.
         colunas_existentes = [col for col in colunas_multi_index.keys() if col in df_final.columns]
         df_exibicao = df_final[colunas_existentes].copy()
         df_exibicao.columns = pd.MultiIndex.from_tuples([colunas_multi_index[c] for c in colunas_existentes])
-        
-        
+
                 # ==========================================================
         # 🎨 9. LAYOUT CROMÁTICO (PALETA PASTEL COMPLETA)
         # ==========================================================
