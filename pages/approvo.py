@@ -157,26 +157,24 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         if df_rm_bruto.empty and buscar_rm:
             df_rm_bruto = pd.DataFrame([{"rm": int(buscar_rm)}])
 
-        if df_pc_bruto.empty and df_rm_bruto.empty:
-            st.warning("⚠️ Nenhum registro correspondente aos critérios selecionados.")
-            st.stop()
+        # 🚨 BLINDAGEM DA RAIZ: Se os DataFrames vierem vazios, força a criação das estruturas mínimas de texto
+        if df_rm_bruto.empty:
+            df_rm_bruto = pd.DataFrame(columns=["rm", "mat", "nome_solicitante", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador"])
+        if df_pc_bruto.empty:
+            df_pc_bruto = pd.DataFrame(columns=["pedido", "mat", "nome_solicitante", "entrega", "quantidade", "status_documento", "data_ocorrencia", "nome_aprovador"])
 
         # ==========================================================
         # 🔄 7. LOGÍSTICA DE UNIFICAÇÃO (MÁGICA DO TEXT-ONLY OBJECTS)
         # ==========================================================
-        if not df_rm_bruto.empty:
-            for c in df_rm_bruto.columns:
-                df_rm_bruto[c] = df_rm_bruto[c].astype(str).str.replace('.0', '', regex=False).str.strip()
-            df_rm_bruto["rm_str"] = df_rm_bruto.get("rm", "---")
-            df_rm_bruto["mat_str"] = df_rm_bruto.get("mat", "---")
-            df_rm_limpo = df_rm_bruto.drop_duplicates().copy()
-        else:
-            df_rm_limpo = pd.DataFrame(columns=["rm_str", "mat_str", "nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador"])
+        # Normalização segura da tabela de RMs
+        for c in df_rm_bruto.columns:
+            df_rm_bruto[c] = df_rm_bruto[c].astype(str).str.replace('.0', '', regex=False).str.strip()
+        
+        df_rm_bruto["rm_str"] = df_rm_bruto.get("rm", "---")
+        df_rm_bruto["mat_str"] = df_rm_bruto.get("mat", "---")
+        df_rm_limpo = df_rm_bruto.drop_duplicates().copy()
 
-        # 🚨 TRAVA DE SEGURANÇA 1: Garante as chaves na tabela de RMs limpa
-        if "rm_str" not in df_rm_limpo.columns: df_rm_limpo["rm_str"] = "---"
-        if "mat_str" not in df_rm_limpo.columns: df_rm_limpo["mat_str"] = "---"
-
+        # Normalização segura da tabela de Vínculos
         if not df_vinculo.empty:
             for c in df_vinculo.columns:
                 df_vinculo[c] = df_vinculo[c].astype(str).str.replace('.0', '', regex=False).str.strip()
@@ -187,33 +185,29 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             df_rm_consolidada = df_rm_limpo.copy()
             df_rm_consolidada["pedido_str"] = "---"
 
-        # 🚨 TRAVA DE SEGURANÇA 2: Garante as chaves na tabela consolidada intermediária
-        if "pedido_str" not in df_rm_consolidada.columns: df_rm_consolidada["pedido_str"] = "---"
-        if "mat_str" not in df_rm_consolidada.columns: df_rm_consolidada["mat_str"] = "---"
+        # Normalização segura da tabela de Pedidos (PC)
+        for c in df_pc_bruto.columns:
+            df_pc_bruto[c] = df_pc_bruto[c].astype(str).str.replace('.0', '', regex=False).str.strip()
+        
+        df_pc_bruto["pedido_str"] = df_pc_bruto.get("pedido", "---")
+        df_pc_bruto["mat_str"] = df_pc_bruto["mat", "---"] if "mat" in df_pc_bruto.columns else "---"
+        
+        df_pc_limpo = df_pc_bruto.drop_duplicates().copy()
+        mapa_colunas_pc = {
+            "nome_solicitante": "comprador",
+            "status_documento": "status_pc",
+            "data_oficial_ocorrencia": "data_ocorrencia_pc",
+            "data_ocorrencia": "data_ocorrencia_pc",
+            "nome_aprovador": "nome_aprovador_pc",
+            "quantidade": "quantidade_comprada"
+        }
+        mapa_existente = {k: v for k, v in mapa_colunas_pc.items() if k in df_pc_limpo.columns}
+        df_pc_limpo.rename(columns=mapa_existente, inplace=True)
 
-        if not df_pc_bruto.empty:
-            for c in df_pc_bruto.columns:
-                df_pc_bruto[c] = df_pc_bruto[c].astype(str).str.replace('.0', '', regex=False).str.strip()
-            df_pc_bruto["pedido_str"] = df_pc_bruto.get("pedido", "---")
-            df_pc_bruto["mat_str"] = df_pc_bruto.get("mat", "---")
-            
-            df_pc_limpo = df_pc_bruto.drop_duplicates().copy()
-            mapa_colunas_pc = {
-                "nome_solicitante": "comprador",
-                "status_documento": "status_pc",
-                "data_oficial_ocorrencia": "data_ocorrencia_pc",
-                "data_ocorrencia": "data_ocorrencia_pc",
-                "nome_aprovador": "nome_aprovador_pc",
-                "quantidade": "quantidade_comprada"
-            }
-            mapa_existente = {k: v for k, v in mapa_colunas_pc.items() if k in df_pc_limpo.columns}
-            df_pc_limpo.rename(columns=mapa_existente, inplace=True)
-        else:
-            df_pc_limpo = pd.DataFrame(columns=["pedido_str", "mat_str", "comprador", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"])
-
-        # 🚨 TRAVA DE SEGURANÇA 3: Garante as chaves na tabela de Pedidos limpa
-        if "pedido_str" not in df_pc_limpo.columns: df_pc_limpo["pedido_str"] = "---"
-        if "mat_str" not in df_pc_limpo.columns: df_pc_limpo["mat_str"] = "---"
+        # 🚨 SEGUNDA CAMADA DE PROTEÇÃO: Força a existência física dos eixos antes da junção final
+        for col_chave in ["pedido_str", "mat_str", "rm_str"]:
+            if col_chave not in df_rm_consolidada.columns: df_rm_consolidada[col_chave] = "---"
+            if col_chave not in df_pc_limpo.columns: df_pc_limpo[col_chave] = "---"
 
         df_rm_consolidada["pedido_str"] = df_rm_consolidada["pedido_str"].astype(str).str.strip()
         df_rm_consolidada["mat_str"] = df_rm_consolidada["mat_str"].astype(str).str.strip()
@@ -223,8 +217,9 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         # União OUTER JOIN completa e estável sobre strings de texto puro
         df_final = pd.merge(df_rm_consolidada, df_pc_limpo, on=["pedido_str", "mat_str"], how="outer")
 
-        df_final["rm"] = df_final["rm"].fillna(df_final["rm_str"])
-        df_final["mat"] = df_final["mat"].fillna(df_final["mat_str"])
+        # Garante o preenchimento das chaves de exibição do grid
+        df_final["rm"] = df_final.get("rm", pd.Series(index=df_final.index)).fillna(df_final["rm_str"])
+        df_final["mat"] = df_final.get("mat", pd.Series(index=df_final.index)).fillna(df_final["mat_str"])
 
         if buscar_rm:
             df_final = df_final[df_final["rm_str"] == str(buscar_rm).strip()]
