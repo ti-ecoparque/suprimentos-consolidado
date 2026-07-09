@@ -93,7 +93,7 @@ if not tem_filtro_ativo:
     st.stop()
 
 # ==========================================================
-# 🚀 6. CONSTRUÇÃO DA QUERY INTELIGENTE INDEPENDENTE (BLINDAGEM TOTAL)
+# 🚀 6. CONSTRUÇÃO DA QUERY INTELIGENTE INDEPENDENTE (FULL COMPARTILHADO)
 # ==========================================================
 with st.spinner("Buscando e cruzando visões comerciais..."):
     try:
@@ -147,6 +147,7 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         if not df_pc_bruto.empty and "entregas_agendadas" in df_pc_bruto.columns:
             df_pc_bruto.drop(columns=["entregas_agendadas"], inplace=True)
 
+        # Se o usuário digitou uma RM e ela não existe no Approvo, garante a estrutura
         if df_rm_bruto.empty and buscar_rm:
             df_rm_bruto = pd.DataFrame([{"rm": int(buscar_rm)}])
 
@@ -154,49 +155,52 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             st.warning("⚠️ Nenhum registro correspondente aos critérios selecionados.")
             st.stop()
 
-                # ==========================================================
-        # 🔄 7. LOGÍSTICA DE UNIFICAÇÃO (MÁGICA DO TEXT-ONLY OBJECTS)
         # ==========================================================
-        # 1. Prepara e limpa a visão da RM garantindo que chaves vitais existam
+        # 🔄 7. LOGÍSTICA DE UNIFICAÇÃO (BLINDAGEM ESTRUTURAL DE COLUNAS)
+        # ==========================================================
+        # Lista padrão de colunas vitais para garantir que o Pandas NUNCA dê KeyError
+        todas_colunas_vitais = [
+            "nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", 
+            "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", 
+            "nome_aprovador", "rm_str", "mat_str", "pedido_str", "comprador", "entrega", 
+            "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"
+        ]
+
+        # 1. Tratamento da tabela de RMs
         if not df_rm_bruto.empty:
             for c in df_rm_bruto.columns:
                 df_rm_bruto[c] = df_rm_bruto[c].astype(str).str.replace('.0', '', regex=False).str.strip()
-            
-            if "rm" not in df_rm_bruto.columns: df_rm_bruto["rm"] = "---"
-            if "mat" not in df_rm_bruto.columns: df_rm_bruto["mat"] = "---"
-            
-            df_rm_bruto["rm_str"] = df_rm_bruto["rm"]
-            df_rm_bruto["mat_str"] = df_rm_bruto["mat"]
+            df_rm_bruto["rm_str"] = df_rm_bruto.get("rm", "---")
+            df_rm_bruto["mat_str"] = df_rm_bruto.get("mat", "---")
             df_rm_limpo = df_rm_bruto.drop_duplicates().copy()
         else:
-            # 🚨 CORREÇÃO REAL DO KEYERROR: Forçamos a estrutura a conter explicitamente as chaves de string 
-            # para que o pd.merge externo tenha onde se acoplar mesmo se a visão vier 100% vazia!
-            df_rm_limpo = pd.DataFrame(columns=["rm_str", "mat_str", "nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador"])
-            df_rm_limpo.loc[0] = ["---"] * len(df_rm_limpo.columns)
+            df_rm_limpo = pd.DataFrame(columns=todas_colunas_vitais)
+            df_rm_limpo.loc[0] = "---"
 
-        # 2. Prepara e limpa a tabela de vínculo intermediária
+        # Garantia de colunas na RM limpa
+        if "rm_str" not in df_rm_limpo.columns: df_rm_limpo["rm_str"] = "---"
+        if "mat_str" not in df_rm_limpo.columns: df_rm_limpo["mat_str"] = "---"
+
+        # 2. Tratamento da tabela de Vínculos
         if not df_vinculo.empty:
             for c in df_vinculo.columns:
                 df_vinculo[c] = df_vinculo[c].astype(str).str.replace('.0', '', regex=False).str.strip()
-            if "rm" not in df_vinculo.columns: df_vinculo["rm"] = "---"
-            if "pedido" not in df_vinculo.columns: df_vinculo["pedido"] = "---"
-            
-            df_vinculo["rm_str"] = df_vinculo["rm"]
-            df_vinculo["pedido_str"] = df_vinculo["pedido"]
+            df_vinculo["rm_str"] = df_vinculo.get("rm", "---")
+            df_vinculo["pedido_str"] = df_vinculo.get("pedido", "---")
             df_rm_consolidada = pd.merge(df_rm_limpo, df_vinculo[["rm_str", "pedido_str"]], on="rm_str", how="outer")
         else:
             df_rm_consolidada = df_rm_limpo.copy()
             df_rm_consolidada["pedido_str"] = "---"
 
-        # 3. Prepara e limpa a visão de Pedidos de Compra (PC)
+        if "pedido_str" not in df_rm_consolidada.columns: df_rm_consolidada["pedido_str"] = "---"
+        if "mat_str" not in df_rm_consolidada.columns: df_rm_consolidada["mat_str"] = "---"
+
+        # 3. Tratamento da tabela de Pedidos (PC)
         if not df_pc_bruto.empty:
             for c in df_pc_bruto.columns:
                 df_pc_bruto[c] = df_pc_bruto[c].astype(str).str.replace('.0', '', regex=False).str.strip()
-            if "pedido" not in df_pc_bruto.columns: df_pc_bruto["pedido"] = "---"
-            if "mat" not in df_pc_bruto.columns: df_pc_bruto["mat"] = "---"
-            
-            df_pc_bruto["pedido_str"] = df_pc_bruto["pedido"]
-            df_pc_bruto["mat_str"] = df_pc_bruto["mat"]
+            df_pc_bruto["pedido_str"] = df_pc_bruto.get("pedido", "---")
+            df_pc_bruto["mat_str"] = df_pc_bruto.get("mat", "---")
             
             df_pc_limpo = df_pc_bruto.drop_duplicates().copy()
             df_pc_limpo.rename(columns={
@@ -208,24 +212,30 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                 "quantidade": "quantidade_comprada"
             }, inplace=True, errors="ignore")
         else:
-            df_pc_limpo = pd.DataFrame(columns=["pedido_str", "mat_str", "comprador", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"])
+            df_pc_limpo = pd.DataFrame(columns=todas_colunas_vitais)
+            df_pc_limpo.loc[0] = "---"
 
-        # Força as chaves de cruzamento para strings limpas sem chance de inferência automática do Pandas
+        if "pedido_str" not in df_pc_limpo.columns: df_pc_limpo["pedido_str"] = "---"
+        if "mat_str" not in df_pc_limpo.columns: df_pc_limpo["mat_str"] = "---"
+
+        # Força chaves para string limpa antes do merge
         df_rm_consolidada["pedido_str"] = df_rm_consolidada["pedido_str"].astype(str).str.strip()
         df_rm_consolidada["mat_str"] = df_rm_consolidada["mat_str"].astype(str).str.strip()
         df_pc_limpo["pedido_str"] = df_pc_limpo["pedido_str"].astype(str).str.strip()
         df_pc_limpo["mat_str"] = df_pc_limpo["mat_str"].astype(str).str.strip()
 
-        # 🔥 CRIAÇÃO DO DF_FINAL EM MODO OUTER JOIN (TEXTO PURO)
+        # 🔥 OUTER JOIN COMPLETO INFALÍVEL
         df_final = pd.merge(df_rm_consolidada, df_pc_limpo, on=["pedido_str", "mat_str"], how="outer")
 
-        # Ajusta chaves para as linhas órfãs geradas pela junção
-        if "rm" in df_final.columns and "rm_str" in df_final.columns:
-            df_final["rm"] = df_final["rm"].fillna(df_final["rm_str"])
-        if "mat" in df_final.columns and "mat_str" in df_final.columns:
-            df_final["mat"] = df_final["mat"].fillna(df_final["mat_str"])
+        # Garante a existência de todas as colunas necessárias pós-merge para evitar quebras adiante
+        for col in todas_colunas_vitais:
+            if col not in df_final.columns:
+                df_final[col] = "---"
 
-        # Aplica filtros combinados rígidos em texto limpo sobre a memória final
+        df_final["rm"] = df_final["rm"].fillna(df_final["rm_str"])
+        df_final["mat"] = df_final["mat"].fillna(df_final["mat_str"])
+
+        # Aplica filtros combinados rígidos em nível de memória
         if buscar_rm:
             df_final = df_final[df_final["rm_str"] == str(buscar_rm).strip()]
         if filtro_req != "Todos":
@@ -236,14 +246,13 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             mapa_invertido = {"Aprovado": "A", "Em Aprovação": "E", "Reprovado": "R"}
             df_final = df_final[df_final["status_pc"].astype(str).str.strip().str.upper() == mapa_invertido[filtro_status_pc].upper()]
 
-        # Trava anti-duplicidade em formato string pura
+        # Trava anti-duplicidade definitiva
         df_final["rm_mat_key"] = df_final["rm"].astype(str) + "_" + df_final["mat"].astype(str)
         df_final = df_final.drop_duplicates(subset=["rm_mat_key"]).copy()
 
-        # ==========================================================
+                # ==========================================================
         # 🚨 7.5 PROCESSAMENTO SEGURO DE DATAS E CÁLCULO DE ATRASO
         # ==========================================================
-        # Extraímos séries isoladas nativas da memória forçando NaT (nulo de data) em qualquer texto inválido
         dt_entrega_puro = pd.to_datetime(df_final["entrega"], errors="coerce")
         dt_necessidade_puro = pd.to_datetime(df_final["data_necessidade"], errors="coerce")
         dt_emissao_puro = pd.to_datetime(df_final["data_emissao"], errors="coerce")
@@ -269,7 +278,6 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
 
         df_final["alerta_data"] = lista_alertas_data
 
-        # Filtro de intervalo de período operando de forma 100% isolada e cronológica
         if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2:
             try:
                 d_ini = filtro_periodo[0]
@@ -290,6 +298,7 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
 
         df_final["entrega_original_dt"] = dt_entrega_puro
         df_final["necessidade_original_dt"] = dt_necessidade_puro
+
 
                 # ==========================================================
         # 📊 8. MAPEAMENTO, TRADUÇÃO E TEXTOS AMIGÁVEIS NAS COLUNAS
