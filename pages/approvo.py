@@ -241,7 +241,7 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
 
 
 
-                # ==========================================================
+        # ==========================================================
         # 🚨 7.5 PROCESSAMENTO SEGURO DE DATAS E CÁLCULO DE ATRASO
         # ==========================================================
         lista_alertas_data = []
@@ -321,66 +321,41 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         df_final["entrega_original_dt"] = dt_entrega_puro
         df_final["necessidade_original_dt"] = dt_necessidade_puro
 
-    except Exception as e:
-        st.error(f"❌ Erro crítico ao consolidar as visões no Cenário D: {e}")
-        st.stop()
-
-# ==========================================================
-# 🚨 VALIDAÇÃO ADICIONAL DE LINHAS (FORA DO RECUO DO SPINNER)
-# ==========================================================
-# Ao rodar aqui na margem zero, o indicador azul desliga antes de parar a tela!
-if df_final.empty:
-    st.warning("⚠️ Nenhum registro corresponde aos critérios selecionados no período filtrado.")
-    st.stop()
-
-
         # ==========================================================
-        # 📊 8. MAPEAMENTO, TRADUÇÃO E PROCESSAMENTO COMPLETO DE STRINGS Visuais
+        # 📊 8. MAPEAMENTO, TRADUÇÃO E PROCESSAMENTO COMPLETO DE STRINGS
         # ==========================================================
         mapa_status_extenso = {"A": "Aprovado", "E": "Em Aprovação", "R": "Reprovado", "---": "---"}
         
         if "status_documento" in df_final.columns:
             df_final["status_documento"] = df_final["status_documento"].map(
-                lambda x: mapa_status_extenso.get(str(x).strip().upper(), "---") if pd.notna(x) and str(x) not in ["nan", "None", "---"] else "---"
+                lambda x: mapa_status_extenso.get(str(x).strip().upper(), "---") 
+                if pd.notna(x) and str(x) not in ["nan", "None", "---"] else "---"
             )
         if "status_pc" in df_final.columns:
             df_final["status_pc"] = df_final["status_pc"].map(
-                lambda x: mapa_status_extenso.get(str(x).strip().upper(), "---") if pd.notna(x) and str(x) not in ["nan", "None", "---"] else "---"
+                lambda x: mapa_status_extenso.get(str(x).strip().upper(), "---") 
+                if pd.notna(x) and str(x) not in ["nan", "None", "---"] else "---"
             )
 
         df_final["qtd_solicitada"] = pd.to_numeric(df_final["qtd_solicitada"], errors="coerce").fillna(0).astype(int)
         df_final["quantidade_comprada"] = pd.to_numeric(df_final["quantidade_comprada"], errors="coerce").fillna(0).astype(int)
 
-        # Formatação visual das datas limpando a memória do Pandas para Strings normais (tipo 'object')
-        def formatar_visual_seguro(valor, incluir_hora=False):
-            if pd.isna(valor) or str(valor).strip() in ["", "---", "nan", "None", "NaT"]:
-                return "Data não informada"
-            try:
-                if hasattr(valor, "strftime"):
-                    return valor.strftime("%d/%m/%Y %H:%M" if incluir_hora else "%d/%m/%Y")
-                t_str = str(valor).strip()
-                if "T" in t_str: t_str = t_str.split("T")[0]
-                elif " " in t_str: t_str = t_str.split(" ")[0]
-                
-                if "-" in t_str:
-                    dt = datetime.datetime.strptime(t_str, "%Y-%m-%d")
-                    return dt.strftime("%d/%m/%Y")
-                elif "/" in t_str:
-                    return t_str
-            except Exception:
-                pass
-            return "Data não informada"
-
-        for col in ["data_emissao", "data_necessidade", "entrega"]:
+        colunas_de_data = ["data_emissao", "data_necessidade", "entrega", "data_ocorrencia", "data_ocorrencia_pc"]
+        for col in colunas_de_data:
             if col in df_final.columns:
-                df_final[col] = df_final[col].apply(lambda x: formatar_visual_seguro(x, incluir_hora=False))
-                
-        for col in ["data_ocorrencia", "data_ocorrencia_pc"]:
-            if col in df_final.columns:
-                df_final[col] = df_final[col].apply(lambda x: formatar_visual_seguro(x, incluir_hora=True))
+                convertido = pd.to_datetime(df_final[col], errors="coerce")
+                if col in ["data_ocorrencia", "data_ocorrencia_pc"]:
+                    df_final[col] = convertido.dt.strftime("%d/%m/%Y %H:%M").fillna("Data não informada").astype(str)
+                else:
+                    df_final[col] = convertido.dt.strftime("%d/%m/%Y").fillna("Data não informada").astype(str)
 
-        df_final["nome_solicitante"] = df_final["nome_solicitante"].fillna("RM Sem Fluxo Approvo").astype(str)
-        df_final["desc_item"] = df_final["desc_item"].fillna("Direto p/ Compras").astype(str)
+        df_final["nome_solicitante"] = df_final["nome_solicitante"].apply(
+            lambda x: "RM Sem Fluxo Approvo" if pd.isna(x) or str(x).strip() in ["", "nan", "None", "---"] else x
+        ).astype(str)
+        
+        df_final["desc_item"] = df_final["desc_item"].apply(
+            lambda x: "Direto p/ Compras" if pd.isna(x) or str(x).strip() in ["", "nan", "None", "---"] else x
+        ).astype(str)
 
         df_final.fillna("---", inplace=True)
         df_final.replace("nan", "---", inplace=True)
@@ -415,6 +390,7 @@ if df_final.empty:
         colunas_existentes = [col for col in colunas_multi_index.keys() if col in df_final.columns]
         df_exibicao = df_final[colunas_existentes].copy()
         df_exibicao.columns = pd.MultiIndex.from_tuples([colunas_multi_index[c] for c in colunas_existentes])
+        
         
                 # ==========================================================
         # 🎨 9. LAYOUT CROMÁTICO (PALETA PASTEL COMPLETA)
@@ -471,5 +447,13 @@ if df_final.empty:
 
     except Exception as e:
         st.error(f"❌ Erro crítico ao consolidar as visões no Cenário D: {e}")
+        st.stop()
+
+# ==========================================================
+# 🚨 TRAVAS DE SEGURANÇA GLOBAIS (FORA DO RECUO DO SPINNER)
+# ==========================================================
+if df_final.empty:
+    st.warning("⚠️ Nenhum registro corresponde aos critérios selecionados no período filtrado.")
+    st.stop()
 
 
