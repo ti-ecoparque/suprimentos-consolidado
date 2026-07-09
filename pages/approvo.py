@@ -250,146 +250,138 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         df_final["rm_mat_key"] = df_final["rm"].astype(str) + "_" + df_final["mat"].astype(str)
         df_final = df_final.drop_duplicates(subset=["rm_mat_key"]).copy()
 
-                # ==========================================================
-        # 🚨 7.5 PROCESSAMENTO SEGURO DE DATAS E CÁLCULO DE ATRASO (IMUNE A ERROS)
         # ==========================================================
-        lista_alertas_data = []
-        lista_dt_entrega_puro = []
-        lista_dt_necessidade_puro = []
-        lista_dt_emissao_puro = []
+        # 🚨 7.5 PROCESSAMENTO SEGURO DE DATAS E CÁLCULO DE ATRASO (100% PYTHON NATIVO)
+        # ==========================================================
+        import datetime
 
-        # Convertemos e calculamos linha por linha usando Python nativo, sem deixar o Pandas adivinhar dtypes
+        # Listas nativas isoladas para garantir estabilidade e imunidade contra dtypes do Pandas
+        lista_alertas_data = []
+        lista_entrega_dt_bruta = []
+        lista_necessidade_dt_bruta = []
+        indices_para_manter = []
+
+        # Convertemos os filtros do calendário do Streamlit para objetos date nativos do Python
+        data_inicio_filtro = None
+        data_fim_filtro = None
+        if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2:
+            if pd.notna(filtro_periodo[0]) and pd.notna(filtro_periodo[1]):
+                data_inicio_filtro = filtro_periodo[0]
+                data_fim_filtro = filtro_periodo[1]
+
+        # Varre linha por linha usando objetos nativos independentes do Pandas
         for idx in df_final.index:
             val_entrega = df_final.loc[idx, "entrega"]
             val_necessidade = df_final.loc[idx, "data_necessidade"]
             val_emissao = df_final.loc[idx, "data_emissao"]
             
-            dt_ent = pd.NaT
-            dt_nec = pd.NaT
-            dt_emi = pd.NaT
+            dt_ent = None
+            dt_nec = None
+            dt_emi = None
             
-            # Tratamento cirúrgico de conversão individual da entrega
-            if pd.notna(val_entrega) and str(val_entrega).strip() not in ["", "---", "nan", "None"]:
-                try: dt_ent = pd.to_datetime(val_entrega, errors='coerce')
-                except Exception: dt_ent = pd.NaT
-                
-            # Tratamento cirúrgico de conversão individual da necessidade
-            if pd.notna(val_necessidade) and str(val_necessidade).strip() not in ["", "---", "nan", "None"]:
-                try: dt_nec = pd.to_datetime(val_necessidade, errors='coerce')
-                except Exception: dt_nec = pd.NaT
+            # Função auxiliar interna para converter qualquer string ou timestamp do Supabase em date nativo
+            def converter_para_data_nativa(valor):
+                if pd.isna(valor) or str(valor).strip() in ["", "---", "nan", "None", "NaT"]:
+                    return None
+                try:
+                    # Se já for um timestamp ou datetime do pandas, extrai a data nativa
+                    if hasattr(valor, "date"):
+                        return valor.date()
+                    # Se for string formatada ou ISO, tenta realizar o parse seguro
+                    t_str = str(valor).strip().split(" ")[0]
+                    if "-" in t_str:
+                        return datetime.datetime.strptime(t_str, "%Y-%m-%d").date()
+                    elif "/" in t_str:
+                        return datetime.datetime.strptime(t_str, "%d/%m/%Y").date()
+                except Exception:
+                    pass
+                return None
 
-            # Tratamento cirúrgico de conversão individual da emissão
-            if pd.notna(val_emissao) and str(val_emissao).strip() not in ["", "---", "nan", "None"]:
-                try: dt_emi = pd.to_datetime(val_emissao, errors='coerce')
-                except Exception: dt_emi = pd.NaT
+            dt_ent = converter_para_data_nativa(val_entrega)
+            dt_nec = converter_para_data_nativa(val_necessidade)
+            dt_emi = converter_para_data_nativa(val_emissao)
 
-            # Armazena nos vetores puros de auditoria
-            lista_dt_entrega_puro.append(dt_ent)
-            lista_dt_necessidade_puro.append(dt_nec)
-            lista_dt_emissao_puro.append(dt_emi)
+            # 1. Aplica o filtro de Intervalo de Período de forma nativa e isolada (Mata o erro do print)
+            if data_inicio_filtro and data_fim_filtro:
+                if dt_emi is None or not (data_inicio_filtro <= dt_emi <= data_fim_filtro):
+                    continue # Descarta a linha antes de gastar processamento
 
-            # Lógica matemática de negócio para o cálculo de dias
-            if pd.isna(dt_ent) or pd.isna(dt_nec):
+            indices_para_manter.append(idx)
+            lista_entrega_dt_bruta.append(dt_ent)
+            lista_necessidade_dt_bruta.append(dt_nec)
+
+            # 2. Lógica matemática de atraso/adiantamento sem dtypes
+            if dt_ent is None or dt_nec is None:
                 lista_alertas_data.append("Data não informada")
             else:
-                try:
-                    diferenca = (dt_ent - dt_nec).days
-                    if diferenca > 0:
-                        lista_alertas_data.append(f"Atraso de {diferenca} dias")
-                    elif diferenca < 0:
-                        lista_alertas_data.append(f"Adiantado {abs(diferenca)} dias")
-                    else:
-                        lista_alertas_data.append("No prazo")
-                except Exception:
-                    lista_alertas_data.append("Data não informada")
+                diferenca = (dt_ent - dt_nec).days
+                if diferenca > 0:
+                    lista_alertas_data.append(f"Atraso de {diferenca} dias")
+                elif diferenca < 0:
+                    lista_alertas_data.append(f"Adiantado {abs(diferenca)} dias")
+                else:
+                    lista_alertas_data.append("No prazo")
 
-        # Injeta os resultados como colunas de texto/objeto comuns
+        # Filtra o DataFrame mantendo apenas as linhas que sobreviveram ao processamento nativo
+        df_final = df_final.loc[indices_para_manter].copy()
         df_final["alerta_data"] = lista_alertas_data
-        
-        # Converte as listas nativas em Series temporárias estáveis
-        dt_emissao_puro = pd.Series(lista_dt_emissao_puro, index=df_final.index)
-        dt_entrega_puro = pd.Series(lista_dt_entrega_puro, index=df_final.index)
-        dt_necessidade_puro = pd.Series(lista_dt_necessidade_puro, index=df_final.index)
-
-        # Filtro de intervalo de período usando o vetor nativo isolado
-        if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2:
-            try:
-                # 🔍 FIX ABSOLUTO: Coleta os limites informados na interface do Streamlit
-                d_ini = filtro_periodo[0]
-                d_fim = filtro_periodo[1]
-                
-                if pd.notna(d_ini) and pd.notna(d_fim):
-                    data_inicio = pd.to_datetime(d_ini)
-                    data_fim = pd.to_datetime(d_fim)
-                    
-                    # Extrai o vetor cronológico DIRETAMENTE da coluna bruta obtida do Supabase,
-                    # forçando coerce para que qualquer string residual vire nulo matemático (NaT)
-                    dt_emissao_limpo_calculo = pd.to_datetime(df_final["data_emissao"], errors="coerce")
-                    
-                    # Executa a filtragem matemática sem chance de colisão de strings ou dtypes inválidos
-                    indices_validos = df_final.index[(dt_emissao_limpo_calculo >= data_inicio) & (dt_emissao_limpo_calculo <= data_fim)]
-                    
-                    df_final = df_final.loc[indices_validos].copy()
-                    dt_entrega_puro = dt_entrega_puro.loc[indices_validos]
-                    dt_necessidade_puro = dt_necessidade_puro.loc[indices_validos]
-            except Exception as ex:
-                # Em caso de qualquer flutuação de tipo de dados, mantém o DataFrame original seguro
-                pass
 
         if df_final.empty:
             st.warning("⚠️ Nenhum registro corresponde aos critérios selecionados no período.")
             st.stop()
 
-        # Guarda as séries em colunas de controle interno para o Layout Cromático (Etapa 9)
-        df_final["entrega_original_dt"] = dt_entrega_puro
-        df_final["necessidade_original_dt"] = dt_necessidade_puro
-
-                # ==========================================================
-        # 📊 8. MAPEAMENTO, TRADUÇÃO E TEXTOS AMIGÁVEIS NAS COLUNAS
+        # ==========================================================
+        # 📊 8. MAPEAMENTO, TRADUÇÃO E PROCESSAMENTO COMPLETO DE STRINGS Visuais
         # ==========================================================
         mapa_status_extenso = {"A": "Aprovado", "E": "Em Aprovação", "R": "Reprovado", "---": "---"}
         
         if "status_documento" in df_final.columns:
             df_final["status_documento"] = df_final["status_documento"].map(
-                lambda x: mapa_status_extenso.get(str(x).strip().upper(), "---") 
-                if pd.notna(x) and str(x) not in ["nan", "None", "---"] else "---"
+                lambda x: mapa_status_extenso.get(str(x).strip().upper(), "---") if pd.notna(x) and str(x) not in ["nan", "None", "---"] else "---"
             )
         if "status_pc" in df_final.columns:
             df_final["status_pc"] = df_final["status_pc"].map(
-                lambda x: mapa_status_extenso.get(str(x).strip().upper(), "---") 
-                if pd.notna(x) and str(x) not in ["nan", "None", "---"] else "---"
+                lambda x: mapa_status_extenso.get(str(x).strip().upper(), "---") if pd.notna(x) and str(x) not in ["nan", "None", "---"] else "---"
             )
 
-        # Trata inteiros limpando strings nulas
         df_final["qtd_solicitada"] = pd.to_numeric(df_final["qtd_solicitada"], errors="coerce").fillna(0).astype(int)
         df_final["quantidade_comprada"] = pd.to_numeric(df_final["quantidade_comprada"], errors="coerce").fillna(0).astype(int)
 
-        # Formatação visual definitiva de strings na tabela com tipo TEXTO PURO (object) garantido
-        colunas_de_data = ["data_emissao", "data_necessidade", "entrega", "data_ocorrencia", "data_ocorrencia_pc"]
-        for col in colunas_de_data:
+        # Formatação visual das datas limpando a memória do Pandas para Strings normais (tipo 'object')
+        def formatar_visual_seguro(valor, incluir_hora=False):
+            if pd.isna(valor) or str(valor).strip() in ["", "---", "nan", "None", "NaT"]:
+                return "Data não informada"
+            try:
+                if hasattr(valor, "strftime"):
+                    return valor.strftime("%d/%m/%Y %H:%M" if incluir_hora else "%d/%m/%Y")
+                t_str = str(valor).strip()
+                if "T" in t_str: t_str = t_str.split("T")[0]
+                elif " " in t_str: t_str = t_str.split(" ")[0]
+                
+                if "-" in t_str:
+                    dt = datetime.datetime.strptime(t_str, "%Y-%m-%d")
+                    return dt.strftime("%d/%m/%Y")
+                elif "/" in t_str:
+                    return t_str
+            except Exception:
+                pass
+            return "Data não informada"
+
+        for col in ["data_emissao", "data_necessidade", "entrega"]:
             if col in df_final.columns:
-                convertido = pd.to_datetime(df_final[col], errors="coerce")
-                if col in ["data_ocorrencia", "data_ocorrencia_pc"]:
-                    df_final[col] = convertido.dt.strftime("%d/%m/%Y %H:%M").fillna("Data não informada").astype(str)
-                else:
-                    df_final[col] = convertido.dt.strftime("%d/%m/%Y").fillna("Data não informada").astype(str)
+                df_final[col] = df_final[col].apply(lambda x: formatar_visual_seguro(x, incluir_hora=False))
+                
+        for col in ["data_ocorrencia", "data_ocorrencia_pc"]:
+            if col in df_final.columns:
+                df_final[col] = df_final[col].apply(lambda x: formatar_visual_seguro(x, incluir_hora=True))
 
-        df_final["nome_solicitante"] = df_final["nome_solicitante"].apply(
-            lambda x: "RM Sem Fluxo Approvo" 
-            if pd.isna(x) or str(x).strip() in ["", "nan", "None", "---"] else x
-        ).astype(str)
-        
-        df_final["desc_item"] = df_final["desc_item"].apply(
-            lambda x: "Direto p/ Compras" 
-            if pd.isna(x) or str(x).strip() in ["", "nan", "None", "---"] else x
-        ).astype(str)
+        df_final["nome_solicitante"] = df_final["nome_solicitante"].fillna("RM Sem Fluxo Approvo").astype(str)
+        df_final["desc_item"] = df_final["desc_item"].fillna("Direto p/ Compras").astype(str)
 
-        # Tratamento final de nulos genéricos de texto
         df_final.fillna("---", inplace=True)
         df_final.replace("nan", "---", inplace=True)
         df_final.replace("None", "---", inplace=True)
 
-        # Estrutura do Dicionário de MultiIndex (Super Cabeçalho Agrupado)
         colunas_multi_index = {
             "nome_solicitante":   ("REQUISICAO DE MATERIAL MEGA", "Requisitante"),
             "rm":                 ("REQUISICAO DE MATERIAL MEGA", "Nr. RM"),
@@ -419,24 +411,28 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         colunas_existentes = [col for col in colunas_multi_index.keys() if col in df_final.columns]
         df_exibicao = df_final[colunas_existentes].copy()
         df_exibicao.columns = pd.MultiIndex.from_tuples([colunas_multi_index[c] for c in colunas_existentes])
-
+        
                 # ==========================================================
-        # 🎨 9. LAYOUT CROMÁTICO (PALETA PASTEL COMPLETA ATUALIZADA)
+        # 🎨 9. LAYOUT CROMÁTICO (PALETA PASTEL COMPLETA)
         # ==========================================================
         def aplicar_cores_corpo(df):
             estilos = pd.DataFrame('', index=df.index, columns=df.columns)
+            mapa_indices = {orig_idx: pos for pos, orig_idx in enumerate(indices_para_manter) if orig_idx in df.index}
+            
             for col in df.columns:
-                grupo = col[0] # Nível 0 do MultiIndex (Super Cabeçalho)
-                
+                grupo = col
                 for i in df.index:
-                    alerta = str(df_final.loc[i, "alerta_data"]).lower()
-                    tem_atraso = "atraso" in alerta
+                    pos_lista = mapa_indices.get(i)
+                    if pos_lista is not None:
+                        dt_ent_nativo = lista_entrega_dt_bruta[pos_lista]
+                        dt_nec_nativo = lista_necessidade_dt_bruta[pos_lista]
+                        tem_atraso = dt_ent_nativo is not None and dt_nec_nativo is not None and (dt_ent_nativo > dt_nec_nativo)
+                    else:
+                        tem_atraso = False
                     
                     if tem_atraso:
-                        # Se houver atraso, aplica o Vermelho Pastel Suave na linha
                         estilos.at[i, col] = 'background-color: #fce4d6; color: #000000;'
                     else:
-                        # Se estiver no prazo, segue a identidade cromática do Excel
                         if grupo == "REQUISICAO DE MATERIAL MEGA":
                             estilos.at[i, col] = 'background-color: #f2f7f2; color: #000000;'
                         elif grupo == "APPROVAL (RM)":
@@ -444,44 +440,32 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                         elif grupo == "PEDIDO DE COMPRA MEGA":
                             estilos.at[i, col] = 'background-color: #fbf2fa; color: #000000;'
                         elif grupo == "APPROVAL (PC)":
-                            st_pc = str(df_final.loc[i, "status_pc"]).upper().strip()
-                            if st_pc in ["A", "APROVADO"]:
-                                estilos.at[i, col] = 'background-color: #f3daf1; color: #000000;'
-                            else:
-                                estilos.at[i, col] = 'background-color: #fbf2fa; color: #000000;'
+                            estilos.at[i, col] = 'background-color: #f3daf1; color: #000000;'
                             
-                    # Regras fixas de destaque se a linha não estiver em atraso
                     if not tem_atraso:
                         if grupo == "SITUAÇÃO DO ITEM":
-                            estilos.at[i, col] = 'background-color: #c6e0b4; color: #000000; font-weight: bold; text-align: center;'
+                            estilos.at[i, col] = 'background-color: #a9d08e; color: #000000; font-weight: bold; text-align: center;'
                         elif grupo == "ALERTA DE DATA":
                             estilos.at[i, col] = 'background-color: #fff2cc; color: #000000; text-align: center;'
             return estilos
 
-        # Injeta o CSS bruto mapeando a contagem real das colunas na tela (0 a 18)
         st.markdown("""
             <style>
                 th.col_heading.level0 { font-weight: bold !important; color: #000000 !important; text-align: center !important; }
-                
-                /* Mapeamento milimétrico das larguras das seções coloridas superiores */
-                th.col_heading.level0.id0_6 { background-color: #e2f0d9 !important; }   /* REQUISICAO DE MATERIAL MEGA (7 colunas) */
-                th.col_heading.level0.id7_9 { background-color: #a9d08e !important; }   /* APPROVAL (RM) (3 colunas) */
-                th.col_heading.level0.id10_13 { background-color: #f2dcfa !important; } /* PEDIDO DE COMPRA MEGA (4 colunas) */
-                th.col_heading.level0.id14_16 { background-color: #df9ff2 !important; } /* APPROVAL (PC) (3 colunas) */
-                
-                /* Novas colunas operacionais no final */
-                th.col_heading.level0.id17 { background-color: #548235 !important; color: #ffffff !important; } /* SITUAÇÃO DO ITEM */
-                th.col_heading.level0.id18 { background-color: #ffe599 !important; }   /* ALERTA DE DATA */
-                
-                /* Centraliza os títulos da linha inferior para acompanhar o Excel */
+                th.col_heading.level0.id0_6 { background-color: #e2f0d9 !important; }
+                th.col_heading.level0.id7_9 { background-color: #a9d08e !important; }
+                th.col_heading.level0.id10_13 { background-color: #f2dcfa !important; }
+                th.col_heading.level0.id14_16 { background-color: #df9ff2 !important; }
+                th.col_heading.level0.id17 { background-color: #a9d08e !important; color: #000000 !important; }
+                th.col_heading.level0.id18 { background-color: #ffe599 !important; }
                 th.col_heading.level1 { text-align: center !important; }
             </style>
         """, unsafe_allow_html=True)
 
-        # Renderiza a tabela definitiva perfeitamente estilizada
         df_estilizado = df_exibicao.style.apply(aplicar_cores_corpo, axis=None)
         st.dataframe(df_estilizado, use_container_width=True, hide_index=True)
 
     except Exception as e:
         st.error(f"❌ Erro crítico ao consolidar as visões no Cenário D: {e}")
+
 
