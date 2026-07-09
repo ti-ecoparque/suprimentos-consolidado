@@ -233,41 +233,51 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         else:
             df_final = df_final.drop_duplicates().copy()
 
+                # ==========================================================
+        # 🚨 7.5 PROCESSAMENTO SEGURO DE DATAS E CÁLCULO DE ATRASO
         # ==========================================================
-        # 🚨 7.5 CÁLCULO LOGÍSTICO E TRATAMENTO DE DATAS SEGURO (MUDANÇA DE ORDEM)
-        # ==========================================================
-        # Extraímos e blindamos os objetos de data brutos antes que qualquer caractere '---' seja inserido
-        df_final["entrega_original_dt"] = pd.to_datetime(df_final["entrega"], errors="coerce")
-        df_final["necessidade_original_dt"] = pd.to_datetime(df_final["data_necessidade"], errors="coerce")
+        # Criamos cópias isoladas das séries originais em formato datetime puro ANTES de formatar como string
+        dt_entrega_puro = pd.to_datetime(df_final["entrega"], errors="coerce")
+        dt_necessidade_puro = pd.to_datetime(df_final["data_necessidade"], errors="coerce")
+        dt_emissao_puro = pd.to_datetime(df_final["data_emissao"], errors="coerce")
 
-        def calcular_atraso(row):
-            dt_entrega = row["entrega_original_dt"]
-            dt_necessidade = row["necessidade_original_dt"]
-            if pd.isna(dt_entrega) or pd.isna(dt_necessidade):
+        def calcular_atraso_seguro(idx):
+            dt_ent = dt_entrega_puro.loc[idx]
+            dt_nec = dt_necessidade_puro.loc[idx]
+            
+            if pd.isna(dt_ent) or pd.isna(dt_nec):
                 return "Data não informada"
+                
             try:
-                diferenca = (dt_entrega - dt_necessidade).days
+                diferenca = (dt_ent - dt_nec).days
                 if diferenca > 0:
                     return f"Atraso de {diferenca} dias"
                 return "No prazo"
             except Exception:
                 return "Data não informada"
 
-        df_final["alerta_data"] = df_final.apply(calcular_atraso, axis=1)
+        # Executa o cálculo usando os vetores de data puros isolados da memória principal
+        df_final["alerta_data"] = df_final.index.map(calcular_atraso_seguro)
 
-        # Filtro de intervalo de período usando os objetos datetime puros de forma segura
+        # 🚨 FILTRO DE INTERVALO DE PERÍODO TOTALMENTE ISOLADO CONTRA LISTAS E CONFLITOS DE TIPOS
         if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2:
             data_inicio = pd.to_datetime(filtro_periodo[0])
             data_fim = pd.to_datetime(filtro_periodo[1])
-            df_final["data_emissao_dt"] = pd.to_datetime(df_final["data_emissao"], errors="coerce")
-            df_final = df_final[(df_final["data_emissao_dt"] >= data_inicio) & (df_final["data_emissao_dt"] <= data_fim)]
+            
+            # Filtra os índices que atendem ao critério usando o vetor puro de emissão
+            indices_validos = df_final.index[(dt_emissao_puro >= data_inicio) & (dt_emissao_puro <= data_fim)]
+            df_final = df_final.loc[indices_validos].copy()
 
         if df_final.empty:
             st.warning("⚠️ Nenhum registro corresponde aos critérios selecionados.")
             st.stop()
 
-                # ==========================================================
-        # 📊 8. MAPEAMENTO, TRADUÇÃO E PROCESSAMENTO FINAL DE STRINGS
+        # Guardamos esses dois vetores limpos especificamente para a lógica de colorização da Etapa 9
+        df_final["entrega_original_dt"] = pd.to_datetime(df_final["entrega"], errors="coerce")
+        df_final["necessidade_original_dt"] = pd.to_datetime(df_final["data_necessidade"], errors="coerce")
+
+        # ==========================================================
+        # 📊 8. MAPEAMENTO, TRADUÇÃO E TEXTOS AMIGÁVEIS NAS COLUNAS
         # ==========================================================
         mapa_status_extenso = {"A": "Aprovado", "E": "Em Aprovação", "R": "Reprovado", "---": "---"}
         
@@ -285,7 +295,7 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         if "quantidade_comprada" in df_final.columns:
             df_final["quantidade_comprada"] = pd.to_numeric(df_final["quantidade_comprada"], errors="coerce").fillna(0).astype(int)
 
-        # Formatação final de strings visuais das datas para o usuário na tela
+        # Formatação visual definitiva de strings na tabela (Preenche com o texto do negócio se for nulo)
         for col in ["data_emissao", "data_necessidade", "entrega"]:
             if col in df_final.columns:
                 df_final[col] = pd.to_datetime(df_final[col], errors="coerce").dt.strftime("%d/%m/%Y").fillna("Data não informada")
