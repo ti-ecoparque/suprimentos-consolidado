@@ -308,81 +308,103 @@ if df_final.empty:
     st.warning("⚠️ Nenhum registro corresponde aos critérios selecionados no período filtrado.")
     st.stop()
 
-# ==========================================================
-# 📊 8. MAPEAMENTO, TRADUÇÃO E PROCESSAMENTO COMPLETO DE STRINGS
-# ==========================================================
-mapa_status_extenso = {"A": "Aprovado", "E": "Em Aprovação", "R": "Reprovado", "---": "---"}
+    # ==========================================================
+    # 📊 8. MAPEAMENTO, TRADUÇÃO E PROCESSAMENTO COMPLETO DE STRINGS
+    # ==========================================================
+    mapa_status_extenso = {"A": "Aprovado", "E": "Em Aprovação", "R": "Reprovado", "---": "---"}
+    
+    if "status_documento" in df_final.columns:
+        df_final["status_documento"] = df_final["status_documento"].map(
+            lambda x: mapa_status_extenso.get(str(x).strip().upper(), "---") 
+            if pd.notna(x) and str(x) not in ["nan", "None", "---"] else "---"
+        )
+    if "status_pc" in df_final.columns:
+        df_final["status_pc"] = df_final["status_pc"].map(
+            lambda x: mapa_status_extenso.get(str(x).strip().upper(), "---") 
+            if pd.notna(x) and str(x) not in ["nan", "None", "---"] else "---"
+        )
 
-if "status_documento" in df_final.columns:
-    df_final["status_documento"] = df_final["status_documento"].map(
-        lambda x: mapa_status_extenso.get(str(x).strip().upper(), "---") 
-        if pd.notna(x) and str(x) not in ["nan", "None", "---"] else "---"
-    )
-if "status_pc" in df_final.columns:
-    df_final["status_pc"] = df_final["status_pc"].map(
-        lambda x: mapa_status_extenso.get(str(x).strip().upper(), "---") 
-        if pd.notna(x) and str(x) not in ["nan", "None", "---"] else "---"
-    )
+    df_final["qtd_solicitada"] = pd.to_numeric(df_final["qtd_solicitada"], errors="coerce").fillna(0).astype(int)
+    df_final["quantidade_comprada"] = pd.to_numeric(df_final["quantidade_comprada"], errors="coerce").fillna(0).astype(int)
 
-df_final["qtd_solicitada"] = pd.to_numeric(df_final["qtd_solicitada"], errors="coerce").fillna(0).astype(int)
-df_final["quantidade_comprada"] = pd.to_numeric(df_final["quantidade_comprada"], errors="coerce").fillna(0).astype(int)
-
-def formatar_visual_seguro(valor, incluir_hora=False):
-    if pd.isna(valor) or str(valor).strip() in ["", "---", "nan", "None", "NaT"]: 
+    # Formatação visual das datas limpando a memória do Pandas para Strings
+    def formatar_visual_seguro(valor, incluir_hora=False):
+        if pd.isna(valor) or str(valor).strip() in ["", "---", "nan", "None", "NaT"]: 
+            return "Data não informada"
+        try:
+            if hasattr(valor, "strftime"): 
+                return valor.strftime("%d/%m/%Y %H:%M" if incluir_hora else "%d/%m/%Y")
+            t_str = str(valor).strip().split(" ")
+            if "-" in t_str:
+                dt = datetime.datetime.strptime(t_str, "%Y-%m-%d")
+                return dt.strftime("%d/%m/%Y")
+            return valor
+        except Exception: 
+            pass
         return "Data não informada"
-    try:
-        if hasattr(valor, "strftime"): 
-            return valor.strftime("%d/%m/%Y %H:%M" if incluir_hora else "%d/%m/%Y")
-        t_str = str(valor).strip().split(" ")
-        if "-" in t_str:
-            dt = datetime.datetime.strptime(t_str, "%Y-%m-%d")
-            return dt.strftime("%d/%m/%Y")
-        return valor
-    except Exception: 
-        pass
-    return "Data não informada"
 
-for col in ["data_emissao", "data_necessidade", "entrega"]:
-    if col in df_final.columns: 
-        df_final[col] = df_final[col].apply(lambda x: formatar_visual_seguro(x, incluir_hora=False))
+    for col in ["data_emissao", "data_necessidade", "entrega"]:
+        if col in df_final.columns: 
+            df_final[col] = df_final[col].apply(lambda x: formatar_visual_seguro(x, incluir_hora=False))
+            
+    for col in ["data_ocorrencia", "data_ocorrencia_pc"]:
+        if col in df_final.columns: 
+            df_final[col] = df_final[col].apply(lambda x: formatar_visual_seguro(x, incluir_hora=True))
+
+    df_final["nome_solicitante"] = df_final["nome_solicitante"].fillna("RM Sem Fluxo Approvo").astype(str)
+    df_final["desc_item"] = df_final["desc_item"].fillna("Direto p/ Compras").astype(str)
+
+    df_final.fillna("---", inplace=True)
+    df_final.replace("nan", "---", inplace=True)
+    df_final.replace("None", "---", inplace=True)
+
+    # 🚨 LISTA DE ORDEM EXATA DOS EIXOS GLOBAIS (19 COLUNAS OFICIAIS)
+    ordem_colunas_exibicao = [
+        "nome_solicitante", "rm", "mat", "desc_item", "qtd_solicitada", "data_emissao", "data_necessidade",
+        "status_documento", "data_ocorrencia", "nome_aprovador",
+        "comprador", "pedido_str", "entrega", "quantidade_comprada",
+        "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc",
+        "sit_item", "alerta_data"
+    ]
+
+    # Garante a existência física das 19 colunas no df_final antes de extrair
+    for c in ordem_colunas_exibicao:
+        if c not in df_final.columns:
+            df_final[c] = "---"
+
+    # DICIONÁRIO DE TUPLAS DO MULTIINDEX (19 ELEMENTOS PAR DISPARAR MATCH DE 100%)
+    colunas_multi_index = {
+        "nome_solicitante":   ("REQUISICAO DE MATERIAL MEGA", "Requisitante"),
+        "rm":                 ("REQUISICAO DE MATERIAL MEGA", "Nr. RM"),
+        "mat":                ("REQUISICAO DE MATERIAL MEGA", "Nr. Material"),
+        "desc_item":          ("REQUISICAO DE MATERIAL MEGA", "Descrição"),
+        "qtd_solicitada":     ("REQUISICAO DE MATERIAL MEGA", "Qt. Sol."),
+        "data_emissao":       ("REQUISICAO DE MATERIAL MEGA", "Data da Requisição"),
+        "data_necessidade":   ("REQUISICAO DE MATERIAL MEGA", "Data da Nec."),
         
-for col in ["data_ocorrencia", "data_ocorrencia_pc"]:
-    if col in df_final.columns: 
-        df_final[col] = df_final[col].apply(lambda x: formatar_visual_seguro(x, incluir_hora=True))
+        "status_documento":   ("APPROVAL (RM)", "Status da Aprovação"),
+        "data_ocorrencia":    ("APPROVAL (RM)", "Data da Aprovação"),
+        "nome_aprovador":     ("APPROVAL (RM)", "Aprovador"),
+        
+        "comprador":          ("PEDIDO DE COMPRA MEGA", "Comprador"),
+        "pedido_str":         ("PEDIDO DE COMPRA MEGA", "Nr. PC"),
+        "entrega":            ("PEDIDO DE COMPRA MEGA", "Data de Entrega"),
+        "quantidade_comprada":("PEDIDO DE COMPRA MEGA", "Qt. Compr."),
+        
+        "status_pc":          ("APPROVAL (PC)", "Status da Aprovação"),
+        "data_ocorrencia_pc": ("APPROVAL (PC)", "Data da Aprovação"),
+        "nome_aprovador_pc":  ("APPROVAL (PC)", "Aprovador"),
+        
+        "sit_item":           ("SITUAÇÃO DO ITEM", "Situação"),
+        "alerta_data":        ("ALERTA DE DATA", "Alerta de Entrega")
+    }
 
-df_final["nome_solicitante"] = df_final["nome_solicitante"].fillna("RM Sem Fluxo Approvo").astype(str)
-df_final["desc_item"] = df_final["desc_item"].fillna("Direto p/ Compras").astype(str)
+    # 🔥 CORREÇÃO REAL: Forçamos o DataFrame a extrair a lista exata e estática de 19 colunas
+    df_exibicao = df_final[ordem_colunas_exibicao].copy()
+    
+    # Constrói o cabeçalho duplo em cima do lote fixado de 19 chaves, zerando o ValueError
+    df_exibicao.columns = pd.MultiIndex.from_tuples([colunas_multi_index[c] for c in ordem_colunas_exibicao])
 
-df_final.fillna("---", inplace=True)
-df_final.replace("nan", "---", inplace=True)
-df_final.replace("None", "---", inplace=True)
-
-# DICIONÁRIO DE EXIBIÇÃO SELETIVO E COMPACTADO (PREVINE LENGTH MISMATCH)
-colunas_multi_index = {
-    "nome_solicitante":   ("REQUISICAO DE MATERIAL MEGA", "Requisitante"),
-    "rm":                 ("REQUISICAO DE MATERIAL MEGA", "Nr. RM"),
-    "mat":                ("REQUISICAO DE MATERIAL MEGA", "Nr. Material"),
-    "desc_item":          ("REQUISICAO DE MATERIAL MEGA", "Descrição"),
-    "qtd_solicitada":     ("REQUISICAO DE MATERIAL MEGA", "Qt. Sol."),
-    "data_emissao":       ("REQUISICAO DE MATERIAL MEGA", "Data da Requisição"),
-    "data_necessidade":   ("REQUISICAO DE MATERIAL MEGA", "Data da Nec."),
-    "status_documento":   ("APPROVAL (RM)", "Status da Aprovação"),
-    "data_ocorrencia":    ("APPROVAL (RM)", "Data da Aprovação"),
-    "nome_aprovador":     ("APPROVAL (RM)", "Aprovador"),
-    "comprador":          ("PEDIDO DE COMPRA MEGA", "Comprador"),
-    "pedido_str":         ("PEDIDO DE COMPRA MEGA", "Nr. PC"),
-    "entrega":            ("PEDIDO DE COMPRA MEGA", "Data de Entrega"),
-    "quantidade_comprada":("PEDIDO DE COMPRA MEGA", "Qt. Compr."),
-    "status_pc":          ("APPROVAL (PC)", "Status da Aprovação"),
-    "data_ocorrencia_pc": ("APPROVAL (PC)", "Data da Aprovação"),
-    "nome_aprovador_pc":  ("APPROVAL (PC)", "Aprovador"),
-    "sit_item":           ("SITUAÇÃO DO ITEM", "Situação"),
-    "alerta_data":        ("ALERTA DE DATA", "Alerta de Entrega")
-}
-
-colunas_existentes = [col for col in colunas_multi_index.keys() if col in df_final.columns]
-df_exibicao = df_final[colunas_existentes].copy()
-df_exibicao.columns = pd.MultiIndex.from_tuples([colunas_multi_index[c] for c in colunas_existentes])
 
 # ==========================================================
 # 🎨 9. LAYOUT CROMÁTICO (PALETA PASTEL COMPLETA)
