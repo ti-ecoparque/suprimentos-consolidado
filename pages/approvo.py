@@ -111,11 +111,8 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         
         if buscar_rm:
             query_rm = query_rm.eq("rm", str(buscar_rm))
-            
-        # 🚨 Bloqueio corrigido e sincronizado com o Selectbox
         if filtro_req != "Todos":
             query_rm = query_rm.eq("nome_solicitante", filtro_req)
-            
         if filtro_status_rm != "Todos":
             mapa_invertido = {"Aprovado": "A", "Em Aprovação": "E", "Reprovado": "R"}
             query_rm = query_rm.eq("status_documento", mapa_invertido[filtro_status_rm])
@@ -152,22 +149,16 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             if lista_pedidos:
                 query_pc = supabase.table("vw_approvo_pc").select("*").in_("pedido", lista_pedidos)
                 
-                # 🚨 Trecho atualizado e sincronizado com o Selectbox de Compradores
                 if filtro_comp != "Todos":
                     query_pc = query_pc.eq("nome_solicitante", filtro_comp)
-                    
-                #if filtro_status_pc != "Todos":
-                    #mapa_invertido = {"Aprovado": "A", "Em Aprovação": "E", "Reprovado": "R"}
-                    #query_pc = query_pc.eq("status_documento", mapa_invertido[filtro_status_pc])
                     
                 res_pc = query_pc.execute()
                 df_pc_bruto = pd.DataFrame(res_pc.data)
                 
-                # Remove a coluna JSONB na raiz para impedir o erro 'unhashable type'
                 if "entregas_agendadas" in df_pc_bruto.columns:
                     df_pc_bruto.drop(columns=["entregas_agendadas"], inplace=True)
 
-                # ==========================================================
+        # ==========================================================
         # 🔄 7. LOGÍSTICA DE UNIFICAÇÃO (MERGE) E TRATAMENTO DE TEXTO (SEGURO)
         # ==========================================================
         if "rm" in df_rm_bruto.columns:
@@ -180,7 +171,6 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         else:
             df_rm_bruto["mat_str"] = ""
             
-        # 🚨 ADICIONADO: 'sit_item' nas colunas vitais da RM
         colunas_vitais_rm = ["nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "rm_str", "mat_str"]
         colunas_existentes_rm = [c for c in colunas_vitais_rm if c in df_rm_bruto.columns]
         df_rm_limpo = df_rm_bruto[colunas_existentes_rm].drop_duplicates().copy()
@@ -208,20 +198,16 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                     "quantidade": "quantidade_comprada"
                 }, inplace=True, errors="ignore")
                 
-                # Ajuste de Case-Sensitivity e remoção de espaços em branco
                 df_consolidado["pedido_str"] = df_consolidado["pedido_str"].astype(str).str.strip()
                 df_consolidado["mat_str"] = df_consolidado["mat_str"].astype(str).str.strip()
                 df_pc_limpo["pedido_str"] = df_pc_limpo["pedido_str"].astype(str).str.strip()
                 df_pc_limpo["mat_str"] = df_pc_limpo["mat_str"].astype(str).str.strip()
                 
-                # Cruzamento das tabelas
                 df_final = pd.merge(df_consolidado, df_pc_limpo, on=["pedido_str", "mat_str"], how="left")
                 
-                # 1. Filtro Combinado Rígido de Comprador
                 if filtro_comp != "Todos":
                     df_final = df_final[df_final["comprador"].astype(str).str.strip() == str(filtro_comp).strip()]
                 
-                # 2. Filtro Combinado Rígido de Status do PC
                 if filtro_status_pc != "Todos":
                     mapa_invertido = {"Aprovado": "A", "Em Aprovação": "E", "Reprovado": "R"}
                     sigla_procurada = mapa_invertido[filtro_status_pc]
@@ -242,57 +228,46 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             if filtro_comp != "Todos" or filtro_status_pc != "Todos":
                 df_final = pd.DataFrame(columns=df_final.columns)
 
-        # 3. Trava rígida antiduplicidade por item real final
         if "mat" in df_final.columns and "rm" in df_final.columns:
             df_final = df_final.drop_duplicates(subset=["rm", "mat"]).copy()
         else:
             df_final = df_final.drop_duplicates().copy()
 
-        # Filtro de intervalo de período blindado individualmente contra listas
-        # Garante que a lista possui exatamente as duas datas (Início e Fim) antes de filtrar
-        if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2:
-            data_inicio = pd.to_datetime(filtro_periodo[0])
-            data_fim = pd.to_datetime(filtro_periodo[1])
-            
-            # Converte temporariamente a coluna para formato datetime do Pandas para fazer o cálculo
-            df_final["data_emissao_dt"] = pd.to_datetime(df_final["data_emissao"], errors="coerce")
-            
-            # Aplica o filtro de intervalo excludente
-            df_final = df_final[(df_final["data_emissao_dt"] >= data_inicio) & (df_final["data_emissao_dt"] <= data_fim)]
-
-        if df_final.empty:
-            st.warning("⚠️ Nenhum registro corresponde aos critérios selecionados.")
-            st.stop()
-            
         # ==========================================================
-        # 🚨 7.5 CÁLCULO LOGÍSTICA DO ALERTA DE DATA (BLINDADO CONTRA NULOS)
+        # 🚨 7.5 CÁLCULO LOGÍSTICO E TRATAMENTO DE DATAS SEGURO (MUDANÇA DE ORDEM)
         # ==========================================================
-        # Guardamos as datas originais convertidas de forma limpa ANTES de qualquer preenchimento de texto
+        # Extraímos e blindamos os objetos de data brutos antes que qualquer caractere '---' seja inserido
         df_final["entrega_original_dt"] = pd.to_datetime(df_final["entrega"], errors="coerce")
         df_final["necessidade_original_dt"] = pd.to_datetime(df_final["data_necessidade"], errors="coerce")
 
         def calcular_atraso(row):
             dt_entrega = row["entrega_original_dt"]
             dt_necessidade = row["necessidade_original_dt"]
-            
-            # Se qualquer uma das duas datas fundamentais estiver vazia, ignora o cálculo
             if pd.isna(dt_entrega) or pd.isna(dt_necessidade):
                 return "Data não informada"
-                
             try:
-                # Calcula a diferença exata de dias corridos entre o planejado e o realizado
                 diferenca = (dt_entrega - dt_necessidade).days
                 if diferenca > 0:
                     return f"Atraso de {diferenca} dias"
                 return "No prazo"
             except Exception:
-                return "---"
+                return "Data não informada"
 
-        # Executa a validação linha por linha
         df_final["alerta_data"] = df_final.apply(calcular_atraso, axis=1)
 
-        # ==========================================================
-        # 📊 8. MAPEAMENTO, TRADUÇÃO E MULTIINDEX DO LAYOUT
+        # Filtro de intervalo de período usando os objetos datetime puros de forma segura
+        if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2:
+            data_inicio = pd.to_datetime(filtro_periodo[0])
+            data_fim = pd.to_datetime(filtro_periodo[1])
+            df_final["data_emissao_dt"] = pd.to_datetime(df_final["data_emissao"], errors="coerce")
+            df_final = df_final[(df_final["data_emissao_dt"] >= data_inicio) & (df_final["data_emissao_dt"] <= data_fim)]
+
+        if df_final.empty:
+            st.warning("⚠️ Nenhum registro corresponde aos critérios selecionados.")
+            st.stop()
+
+                # ==========================================================
+        # 📊 8. MAPEAMENTO, TRADUÇÃO E PROCESSAMENTO FINAL DE STRINGS
         # ==========================================================
         mapa_status_extenso = {"A": "Aprovado", "E": "Em Aprovação", "R": "Reprovado", "---": "---"}
         
@@ -310,17 +285,15 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         if "quantidade_comprada" in df_final.columns:
             df_final["quantidade_comprada"] = pd.to_numeric(df_final["quantidade_comprada"], errors="coerce").fillna(0).astype(int)
 
-        # Formatação visual das datas na tabela brasileira
+        # Formatação final de strings visuais das datas para o usuário na tela
         for col in ["data_emissao", "data_necessidade", "entrega"]:
             if col in df_final.columns:
-                # 🚨 REGRA CRÍTICA: Se a data for nula, formata com o texto solicitado pelo negócio
                 df_final[col] = pd.to_datetime(df_final[col], errors="coerce").dt.strftime("%d/%m/%Y").fillna("Data não informada")
                 
         for col in ["data_ocorrencia", "data_ocorrencia_pc"]:
             if col in df_final.columns:
                 df_final[col] = pd.to_datetime(df_final[col], errors="coerce").dt.strftime("%d/%m/%Y %H:%M").fillna("Data não informada")
 
-        # Limpa os nulos das demais colunas genéricas de texto
         df_final.fillna("---", inplace=True)
         df_final.replace("nan", "---", inplace=True)
 
