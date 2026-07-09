@@ -360,47 +360,50 @@ df_final.replace("None", "---", inplace=True)
 
 # LISTA DE ORDEM EXATA DOS EIXOS GLOBAIS (19 COLUNAS OFICIAIS)
 ordem_colunas_exibicao = [
-    "nome_solicitante", "rm", "mat", "desc_item", "qtd_solicitada", "data_emissao", "data_necessidade",
-    "status_documento", "data_ocorrencia", "nome_aprovador",
-    "comprador", "pedido_str", "entrega", "quantidade_comprada",
-    "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc",
-    "sit_item", "alerta_data"
-]
-
-for c in ordem_colunas_exibicao:
-    if c not in df_final.columns:
-        df_final[c] = "---"
+            "nome_solicitante", "rm", "mat", "desc_item", "qtd_solicitada", "data_emissao", "data_necessidade",
+            "status_documento", "data_ocorrencia", "nome_aprovador",
+            "comprador", "pedido_str", "entrega", "quantidade_comprada",
+            "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc",
+            "sit_item", "alerta_data"
+        ]
 
 # DICIONÁRIO DE TUPLAS DO MULTIINDEX (19 ELEMENTOS MA-TE-MÁ-TI-COS)
 colunas_multi_index = {
-    "nome_solicitante":   ("REQUISICAO DE MATERIAL MEGA", "Requisitante"),
-    "rm":                 ("REQUISICAO DE MATERIAL MEGA", "Nr. RM"),
-    "mat":                ("REQUISICAO DE MATERIAL MEGA", "Nr. Material"),
-    "desc_item":          ("REQUISICAO DE MATERIAL MEGA", "Descrição"),
-    "qtd_solicitada":     ("REQUISICAO DE MATERIAL MEGA", "Qt. Sol."),
-    "data_emissao":       ("REQUISICAO DE MATERIAL MEGA", "Data da Requisição"),
-    "data_necessidade":   ("REQUISICAO DE MATERIAL MEGA", "Data da Nec."),
-    
-    "status_documento":   ("APPROVAL (RM)", "Status da Aprovação"),
-    "data_ocorrencia":    ("APPROVAL (RM)", "Data da Aprovação"),
-    "nome_aprovador":     ("APPROVAL (RM)", "Aprovador"),
-    
-    "comprador":          ("PEDIDO DE COMPRA MEGA", "Comprador"),
-    "pedido_str":         ("PEDIDO DE COMPRA MEGA", "Nr. PC"),
-    "entrega":            ("PEDIDO DE COMPRA MEGA", "Data de Entrega"),
-    "quantidade_comprada":("PEDIDO DE COMPRA MEGA", "Qt. Compr."),
-    
-    "status_pc":          ("APPROVAL (PC)", "Status da Aprovação"),
-    "data_ocorrencia_pc": ("APPROVAL (PC)", "Data da Aprovação"),
-    "nome_aprovador_pc":  ("APPROVAL (PC)", "Aprovador"),
-    
-    "sit_item":           ("SITUAÇÃO DO ITEM", "Situação"),
-    "alerta_data":        ("ALERTA DE DATA", "Alerta de Entrega")
-}
+            "nome_solicitante":   ("REQUISICAO DE MATERIAL MEGA", "Requisitante"),
+            "rm":                 ("REQUISICAO DE MATERIAL MEGA", "Nr. RM"),
+            "mat":                ("REQUISICAO DE MATERIAL MEGA", "Nr. Material"),
+            "desc_item":          ("REQUISICAO DE MATERIAL MEGA", "Descrição"),
+            "qtd_solicitada":     ("REQUISICAO DE MATERIAL MEGA", "Qt. Sol."),
+            "data_emissao":       ("REQUISICAO DE MATERIAL MEGA", "Data da Requisição"),
+            "data_necessidade":   ("REQUISICAO DE MATERIAL MEGA", "Data da Nec."),
+            
+            "status_documento":   ("APPROVAL (RM)", "Status da Aprovação"),
+            "data_ocorrencia":    ("APPROVAL (RM)", "Data da Aprovação"),
+            "nome_aprovador":     ("APPROVAL (RM)", "Aprovador"),
+            
+            "comprador":          ("PEDIDO DE COMPRA MEGA", "Comprador"),
+            "pedido_str":         ("PEDIDO DE COMPRA MEGA", "Nr. PC"),
+            "entrega":            ("PEDIDO DE COMPRA MEGA", "Data de Entrega"),
+            "quantidade_comprada":("PEDIDO DE COMPRA MEGA", "Qt. Compr."),
+            
+            "status_pc":          ("APPROVAL (PC)", "Status da Aprovação"),
+            "data_ocorrencia_pc": ("APPROVAL (PC)", "Data da Aprovação"),
+            "nome_aprovador_pc":  ("APPROVAL (PC)", "Aprovador"),
+            
+            "sit_item":           ("SITUAÇÃO DO ITEM", "Situação"),
+            "alerta_data":        ("ALERTA DE DATA", "Alerta de Entrega")
+        }
 
-# Extrai e fixa as colunas na margem zero
-df_exibicao = df_final[ordem_colunas_exibicao].copy()
-df_exibicao.columns = pd.MultiIndex.from_tuples([colunas_multi_index[c] for c in ordem_colunas_exibicao])
+colunas_finais_validas = [c for c in ordem_colunas_exibicao if c in colunas_multi_index]
+
+# Garante a existência física das colunas estruturadas no DataFrame antes de copiar
+for c in colunas_finais_validas:
+    if c not in df_final.columns:
+        df_final[c] = "---"
+
+# Extrai a tabela base e aplica as tuplas correspondentes com tamanho idêntico de eixos
+df_exibicao = df_final[colunas_finais_validas].copy()
+df_exibicao.columns = pd.MultiIndex.from_tuples([colunas_multi_index[c] for c in colunas_finais_validas])
 
 # ==========================================================
 # 🎨 9. LAYOUT CROMÁTICO (PALETA PASTEL COMPLETA)
