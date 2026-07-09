@@ -150,12 +150,12 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             st.warning("⚠️ Nenhum registro localizado para os critérios selecionados.")
             st.stop()
 
-            # ==========================================================
+                # ==========================================================
         # 🔄 7. LOGÍSTICA DE UNIFICAÇÃO (MERGE INVERSO: PC COMO BASE)
         # ==========================================================
         if not df_pc_bruto.empty:
-            df_pc_bruto["pedido_str"] = df_pc_bruto["pedido"].fillna("").astype(str).str.split('.').str.str.strip()
-            df_pc_bruto["mat_str"] = df_pc_bruto["mat"].fillna("").astype(str).str.split('.').str.str.strip()
+            df_pc_bruto["pedido_str"] = df_pc_bruto["pedido"].fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
+            df_pc_bruto["mat_str"] = df_pc_bruto["mat"].fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
             
             colunas_vitais_pc = ["pedido_str", "mat_str", "nome_solicitante", "entrega", "quantidade", "status_documento", "data_ocorrencia", "nome_aprovador"]
             colunas_existentes_pc = [c for c in colunas_vitais_pc if c in df_pc_bruto.columns]
@@ -173,15 +173,15 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             df_pc_base = pd.DataFrame(columns=["pedido_str", "mat_str", "comprador", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"])
 
         if not df_vinculo.empty:
-            df_vinculo["rm_str"] = df_vinculo["rm"].fillna("").astype(str).str.split('.').str.str.strip()
-            df_vinculo["pedido_str"] = df_vinculo["pedido"].fillna("").astype(str).str.split('.').str.str.strip()
+            df_vinculo["rm_str"] = df_vinculo["rm"].fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
+            df_vinculo["pedido_str"] = df_vinculo["pedido"].fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
             df_pc_consolidado = pd.merge(df_pc_base, df_vinculo[["pedido_str", "rm_str"]], on="pedido_str", how="left")
         else:
             df_pc_consolidado = df_pc_base.copy()
             df_pc_consolidado["rm_str"] = ""
 
         if not df_rm_bruto.empty:
-            df_rm_bruto["rm_str"] = df_rm_bruto["rm"].fillna("").astype(str).str.split('.').str.str.strip()
+            df_rm_bruto["rm_str"] = df_rm_bruto["rm"].fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
             df_rm_bruto["mat_str"] = df_rm_bruto["mat"].fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
             
             colunas_vitais_rm = ["nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "rm_str", "mat_str"]
@@ -211,6 +211,7 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             df_final = df_final.drop_duplicates(subset=["rm", "mat"]).copy()
         else:
             df_final = df_final.drop_duplicates().copy()
+
 
         # ==========================================================
         # 🚨 7.5 PROCESSAMENTO SEGURO DE DATAS E CÁLCULO DE ATRASO
