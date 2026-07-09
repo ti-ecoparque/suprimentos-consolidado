@@ -93,7 +93,7 @@ if not tem_filtro_ativo:
     st.info("💡 Selecione qualquer filtro acima ou digite uma RM para carregar os dados consolidados.")
     st.stop()
 
-# Inicializa a estrutura de dados final para evitar quebra de escopo
+# Inicializa as variáveis de controle de fluxo de forma limpa na raiz
 df_final = pd.DataFrame()
 lista_entrega_dt_bruta = []
 lista_necessidade_dt_bruta = []
@@ -157,7 +157,7 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         if df_rm_bruto.empty and buscar_rm:
             df_rm_bruto = pd.DataFrame([{"rm": int(buscar_rm)}])
 
-        # 🚨 BLINDAGEM DA RAIZ: Se os DataFrames vierem vazios, força a criação das estruturas mínimas de texto
+        # Força a criação das chaves mínimas em formato DataFrame se vierem vazias do Supabase
         if df_rm_bruto.empty:
             df_rm_bruto = pd.DataFrame(columns=["rm", "mat", "nome_solicitante", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador"])
         if df_pc_bruto.empty:
@@ -166,15 +166,12 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         # ==========================================================
         # 🔄 7. LOGÍSTICA DE UNIFICAÇÃO (MÁGICA DO TEXT-ONLY OBJECTS)
         # ==========================================================
-        # Normalização segura da tabela de RMs
         for c in df_rm_bruto.columns:
             df_rm_bruto[c] = df_rm_bruto[c].astype(str).str.replace('.0', '', regex=False).str.strip()
-        
         df_rm_bruto["rm_str"] = df_rm_bruto.get("rm", "---")
         df_rm_bruto["mat_str"] = df_rm_bruto.get("mat", "---")
         df_rm_limpo = df_rm_bruto.drop_duplicates().copy()
 
-        # Normalização segura da tabela de Vínculos
         if not df_vinculo.empty:
             for c in df_vinculo.columns:
                 df_vinculo[c] = df_vinculo[c].astype(str).str.replace('.0', '', regex=False).str.strip()
@@ -185,14 +182,12 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             df_rm_consolidada = df_rm_limpo.copy()
             df_rm_consolidada["pedido_str"] = "---"
 
-        # Normalização segura da tabela de Pedidos (PC)
         for c in df_pc_bruto.columns:
             df_pc_bruto[c] = df_pc_bruto[c].astype(str).str.replace('.0', '', regex=False).str.strip()
-        
         df_pc_bruto["pedido_str"] = df_pc_bruto.get("pedido", "---")
-        df_pc_bruto["mat_str"] = df_pc_bruto["mat", "---"] if "mat" in df_pc_bruto.columns else "---"
-        
+        df_pc_bruto["mat_str"] = df_pc_bruto.get("mat", "---")
         df_pc_limpo = df_pc_bruto.drop_duplicates().copy()
+
         mapa_colunas_pc = {
             "nome_solicitante": "comprador",
             "status_documento": "status_pc",
@@ -204,7 +199,7 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         mapa_existente = {k: v for k, v in mapa_colunas_pc.items() if k in df_pc_limpo.columns}
         df_pc_limpo.rename(columns=mapa_existente, inplace=True)
 
-        # 🚨 SEGUNDA CAMADA DE PROTEÇÃO: Força a existência física dos eixos antes da junção final
+        # Blindagem forçada de strings de eixos antes do merge para exterminar KeyError: 'mat'
         for col_chave in ["pedido_str", "mat_str", "rm_str"]:
             if col_chave not in df_rm_consolidada.columns: df_rm_consolidada[col_chave] = "---"
             if col_chave not in df_pc_limpo.columns: df_pc_limpo[col_chave] = "---"
@@ -214,12 +209,10 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         df_pc_limpo["pedido_str"] = df_pc_limpo["pedido_str"].astype(str).str.strip()
         df_pc_limpo["mat_str"] = df_pc_limpo["mat_str"].astype(str).str.strip()
 
-        # União OUTER JOIN completa e estável sobre strings de texto puro
         df_final = pd.merge(df_rm_consolidada, df_pc_limpo, on=["pedido_str", "mat_str"], how="outer")
 
-        # Garante o preenchimento das chaves de exibição do grid
-        df_final["rm"] = df_final.get("rm", pd.Series(index=df_final.index)).fillna(df_final["rm_str"])
-        df_final["mat"] = df_final.get("mat", pd.Series(index=df_final.index)).fillna(df_final["mat_str"])
+        df_final["rm"] = df_final.get("rm", pd.Series(dtype=str, index=df_final.index)).fillna(df_final["rm_str"])
+        df_final["mat"] = df_final.get("mat", pd.Series(dtype=str, index=df_final.index)).fillna(df_final["mat_str"])
 
         if buscar_rm:
             df_final = df_final[df_final["rm_str"] == str(buscar_rm).strip()]
@@ -234,8 +227,7 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         df_final["rm_mat_key"] = df_final["rm"].astype(str) + "_" + df_final["mat"].astype(str)
         df_final = df_final.drop_duplicates(subset=["rm_mat_key"]).copy()
 
-        
-    # ==========================================================
+        # ==========================================================
         # 🚨 7.5 PROCESSAMENTO SEGURO DE DATAS E CÁLCULO DE ATRASO
         # ==========================================================
         lista_alertas_data = []
@@ -249,8 +241,7 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             val_emissao = df_final.loc[idx, "data_emissao"]
             
             def converter_para_data_nativa(valor):
-                if pd.isna(valor) or str(valor).strip() in ["", "---", "nan", "None", "NaT"]:
-                    return None
+                if pd.isna(valor) or str(valor).strip() in ["", "---", "nan", "None", "NaT"]: return None
                 try:
                     if hasattr(valor, "date"): return valor.date()
                     t_str = str(valor).strip().split(" ")
@@ -286,7 +277,6 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
     except Exception as e:
         st.error(f"❌ Erro crítico ao consolidar as visões no Cenário D: {e}")
         st.stop()
-
 # ==========================================================
 # 🚨 TRAVAS DE SEGURANÇA E MULTIINDEX GLOBAIS (MARGEM ZERO)
 # ==========================================================
@@ -301,32 +291,40 @@ mapa_status_extenso = {"A": "Aprovado", "E": "Em Aprovação", "R": "Reprovado",
 
 if "status_documento" in df_final.columns:
     df_final["status_documento"] = df_final["status_documento"].map(
-        lambda x: mapa_status_extenso.get(str(x).strip().upper(), "---") if pd.notna(x) and str(x) not in ["nan", "None", "---"] else "---"
+        lambda x: mapa_status_extenso.get(str(x).strip().upper(), "---") 
+        if pd.notna(x) and str(x) not in ["nan", "None", "---"] else "---"
     )
 if "status_pc" in df_final.columns:
     df_final["status_pc"] = df_final["status_pc"].map(
-        lambda x: mapa_status_extenso.get(str(x).strip().upper(), "---") if pd.notna(x) and str(x) not in ["nan", "None", "---"] else "---"
+        lambda x: mapa_status_extenso.get(str(x).strip().upper(), "---") 
+        if pd.notna(x) and str(x) not in ["nan", "None", "---"] else "---"
     )
 
 df_final["qtd_solicitada"] = pd.to_numeric(df_final["qtd_solicitada"], errors="coerce").fillna(0).astype(int)
 df_final["quantidade_comprada"] = pd.to_numeric(df_final["quantidade_comprada"], errors="coerce").fillna(0).astype(int)
 
 def formatar_visual_seguro(valor, incluir_hora=False):
-    if pd.isna(valor) or str(valor).strip() in ["", "---", "nan", "None", "NaT"]: return "Data não informada"
+    if pd.isna(valor) or str(valor).strip() in ["", "---", "nan", "None", "NaT"]: 
+        return "Data não informada"
     try:
-        if hasattr(valor, "strftime"): return valor.strftime("%d/%m/%Y %H:%M" if incluir_hora else "%d/%m/%Y")
+        if hasattr(valor, "strftime"): 
+            return valor.strftime("%d/%m/%Y %H:%M" if incluir_hora else "%d/%m/%Y")
         t_str = str(valor).strip().split(" ")
-        if "-" in t_str[0]:
-            dt = datetime.datetime.strptime(t_str[0], "%Y-%m-%d")
+        if "-" in t_str:
+            dt = datetime.datetime.strptime(t_str, "%Y-%m-%d")
             return dt.strftime("%d/%m/%Y")
         return valor
-    except Exception: pass
+    except Exception: 
+        pass
     return "Data não informada"
 
 for col in ["data_emissao", "data_necessidade", "entrega"]:
-    if col in df_final.columns: df_final[col] = df_final[col].apply(lambda x: formatar_visual_seguro(x, incluir_hora=False))
+    if col in df_final.columns: 
+        df_final[col] = df_final[col].apply(lambda x: formatar_visual_seguro(x, incluir_hora=False))
+        
 for col in ["data_ocorrencia", "data_ocorrencia_pc"]:
-    if col in df_final.columns: df_final[col] = df_final[col].apply(lambda x: formatar_visual_seguro(x, incluir_hora=True))
+    if col in df_final.columns: 
+        df_final[col] = df_final[col].apply(lambda x: formatar_visual_seguro(x, incluir_hora=True))
 
 df_final["nome_solicitante"] = df_final["nome_solicitante"].fillna("RM Sem Fluxo Approvo").astype(str)
 df_final["desc_item"] = df_final["desc_item"].fillna("Direto p/ Compras").astype(str)
@@ -370,7 +368,7 @@ def aplicar_cores_corpo(df):
     mapa_indices = {orig_idx: pos for pos, orig_idx in enumerate(indices_para_manter) if orig_idx in df.index}
     
     for col in df.columns:
-        grupo = col[0]
+        grupo = col
         for i in df.index:
             pos_lista = mapa_indices.get(i)
             if pos_lista is not None:
@@ -413,5 +411,4 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 df_estilizado = df_exibicao.style.apply(aplicar_cores_corpo, axis=None)
-st.dataframe(df_estilizado, use_container_width=True, hide_index=True)    
-       
+st.dataframe(df_estilizado, use_container_width=True, hide_index=True)
