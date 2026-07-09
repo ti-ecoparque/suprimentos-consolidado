@@ -276,8 +276,8 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         df_final["entrega_original_dt"] = pd.to_datetime(df_final["entrega"], errors="coerce")
         df_final["necessidade_original_dt"] = pd.to_datetime(df_final["data_necessidade"], errors="coerce")
 
-        # ==========================================================
-        # 📊 8. MAPEAMENTO, TRADUÇÃO E TEXTOS AMIGÁVEIS NAS COLUNAS
+                # ==========================================================
+        # 📊 8. MAPEAMENTO, TRADUÇÃO E PROCESSAMENTO COMPLETO DE STRINGS
         # ==========================================================
         mapa_status_extenso = {"A": "Aprovado", "E": "Em Aprovação", "R": "Reprovado", "---": "---"}
         
@@ -295,15 +295,30 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         if "quantidade_comprada" in df_final.columns:
             df_final["quantidade_comprada"] = pd.to_numeric(df_final["quantidade_comprada"], errors="coerce").fillna(0).astype(int)
 
-        # Formatação visual definitiva de strings na tabela (Preenche com o texto do negócio se for nulo)
-        for col in ["data_emissao", "data_necessidade", "entrega"]:
-            if col in df_final.columns:
-                df_final[col] = pd.to_datetime(df_final[col], errors="coerce").dt.strftime("%d/%m/%Y").fillna("Data não informada")
-                
-        for col in ["data_ocorrencia", "data_ocorrencia_pc"]:
-            if col in df_final.columns:
-                df_final[col] = pd.to_datetime(df_final[col], errors="coerce").dt.strftime("%d/%m/%Y %H:%M").fillna("Data não informada")
+        # 🚨 FUNÇÃO ULTRA-BLINDADA PARA FORMATAÇÃO DE DATAS:
+        # Se a coluna contiver '---', 'nan' ou nulo, o framework ignora o erro matematicamente
+        # e preenche com o texto corporativo correto sem estourar o erro 'datetime64[s]'
+        def formatar_data_segura(serie, incluir_hora=False):
+            formato = "%d/%m/%Y %H:%M" if incluir_hora else "%d/%m/%Y"
+            # Converte forçando nulo (NaT) em qualquer texto inválido como '---'
+            convertido = pd.to_datetime(serie, errors="coerce")
+            # Retorna a string formatada ou o aviso amigável
+            return convertido.dt.strftime(formato).fillna("Data não informada")
 
+        # Aplica a formatação segura coluna por coluna
+        if "data_emissao" in df_final.columns:
+            df_final["data_emissao"] = formatar_data_segura(df_final["data_emissao"])
+        if "data_necessidade" in df_final.columns:
+            df_final["data_necessidade"] = formatar_data_segura(df_final["data_necessidade"])
+        if "entrega" in df_final.columns:
+            df_final["entrega"] = formatar_data_segura(df_final["entrega"])
+            
+        if "data_ocorrencia" in df_final.columns:
+            df_final["data_ocorrencia"] = formatar_data_segura(df_final["data_ocorrencia"], incluir_hora=True)
+        if "data_ocorrencia_pc" in df_final.columns:
+            df_final["data_ocorrencia_pc"] = formatar_data_segura(df_final["data_ocorrencia_pc"], incluir_hora=True)
+
+        # Limpa os nulos residuais das demais colunas de texto (Apenas no final do arquivo!)
         df_final.fillna("---", inplace=True)
         df_final.replace("nan", "---", inplace=True)
 
@@ -338,62 +353,52 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         df_exibicao = df_final[colunas_existentes].copy()
         df_exibicao.columns = pd.MultiIndex.from_tuples([colunas_multi_index[c] for c in colunas_existentes])
 
-
         # ==========================================================
-        # 🎨 9. LAYOUT CROMÁTICO (PALETA PASTEL E ADICIONAIS)
+        # 🎨 9. LAYOUT CROMÁTICO (PALETA PASTEL COMPLETA)
         # ==========================================================
         def aplicar_cores_corpo(df):
-            # Inicializa uma planilha de estilos em branco
             estilos = pd.DataFrame('', index=df.index, columns=df.columns)
-            
-            # Varia célula por célula para aplicar as novas regras executivas
-            for idx in df.index:
-                # 🚨 VERIFICA SE HÁ ATRASO PARA PINTAR A LINHA DE VERMELHO SUAVE
-                dt_ent = df_final.loc[idx, "entrega_original_dt"]
-                dt_nec = df_final.loc[idx, "necessidade_original_dt"]
-                tem_atraso = pd.notna(dt_ent) and pd.notna(dt_nec) and (dt_ent > dt_nec)
+            for col in df.columns:
+                grupo = col[0] # Nível 0 do MultiIndex (Super Cabeçalho)
                 
-                for col in df.columns:
-                    grupo = col[0] # Nível 0 do MultiIndex (Super Cabeçalho)
+                # Resgata a checagem de atraso calculada na etapa 7.5 de forma segura
+                idx = estilos.index
+                for i in idx:
+                    alerta = str(df_final.loc[i, "alerta_data"]).lower()
+                    tem_atraso = "atraso" in alerta
                     
                     if tem_atraso:
-                        # Se houver atraso, força o fundo em Vermelho Pastel Suave para a linha inteira
-                        estilos.at[idx, col] = 'background-color: #fce4d6; color: #000000;'
+                        estilos.at[i, col] = 'background-color: #fce4d6; color: #000000;' # Vermelho claro para atrasos
                     else:
-                        # Se estiver no prazo, segue o degradê original do seu print
                         if grupo == "REQUISICAO DE MATERIAL MEGA":
-                            estilos.at[idx, col] = 'background-color: #f2f7f2; color: #000000;'
+                            estilos.at[i, col] = 'background-color: #f2f7f2; color: #000000;'
                         elif grupo == "APPROVAL (RM)":
-                            estilos.at[idx, col] = 'background-color: #e2f0d9; color: #000000;'
+                            estilos.at[i, col] = 'background-color: #e2f0d9; color: #000000;'
                         elif grupo == "PEDIDO DE COMPRA MEGA":
-                            estilos.at[idx, col] = 'background-color: #fbf2fa; color: #000000;'
+                            estilos.at[i, col] = 'background-color: #fbf2fa; color: #000000;'
                         elif grupo == "APPROVAL (PC)":
-                            estilos.at[idx, col] = 'background-color: #f3daf1; color: #000000;'
+                            estilos.at[i, col] = 'background-color: #f3daf1; color: #000000;'
                             
-                    # 🚨 EXCEÇÃO RIGIDA DAS DUAS NOVAS COLUNAS SE NÃO HOUVER ATRASO
+                    # Aplica a cor das novas colunas operacionais se não houver atraso na linha
                     if not tem_atraso:
                         if grupo == "SITUAÇÃO DO ITEM":
-                            estilos.at[idx, col] = 'background-color: #70ad47; color: #ffffff; font-weight: bold;' # Verde Forte corporativo
+                            estilos.at[i, col] = 'background-color: #70ad47; color: #ffffff; font-weight: bold;'
                         elif grupo == "ALERTA DE DATA":
-                            estilos.at[idx, col] = 'background-color: #fff2cc; color: #000000;' # Amarelo bem fraco pastel
+                            estilos.at[i, col] = 'background-color: #fff2cc; color: #000000;'
             return estilos
 
-        # Injeta o código CSS para colorir os blocos fixos superiores do cabeçalho HTML
         st.markdown("""
             <style>
                 th.col_heading.level0 { font-weight: bold !important; color: #000000 !important; text-align: center !important; }
-                th.col_heading.level0.id0_6 { background-color: #e2f0d9 !important; }   /* RM verde claro */
-                th.col_heading.level0.id7_9 { background-color: #a9d08e !important; }   /* Approval RM verde médio */
-                th.col_heading.level0.id10_13 { background-color: #f2dcfa !important; } /* PC rosa claro */
-                th.col_heading.level0.id14_16 { background-color: #df9ff2 !important; } /* Approval PC roxo médio */
-                
-                /* NOVOS CABEÇALHOS ADICIONADOS */
-                th.col_heading.level0.id17 { background-color: #548235 !important; color: #ffffff !important; } /* Situação verde escuro */
-                th.col_heading.level0.id18 { background-color: #ffe599 !important; } /* Alerta amarelo fraco */
+                th.col_heading.level0.id0_6 { background-color: #e2f0d9 !important; }
+                th.col_heading.level0.id7_9 { background-color: #a9d08e !important; }
+                th.col_heading.level0.id10_13 { background-color: #f2dcfa !important; }
+                th.col_heading.level0.id14_16 { background-color: #df9ff2 !important; }
+                th.col_heading.level0.id17 { background-color: #548235 !important; color: #ffffff !important; }
+                th.col_heading.level0.id18 { background-color: #ffe599 !important; }
             </style>
         """, unsafe_allow_html=True)
 
-        # Renderiza a tabela definitiva estruturada com todas as regras unificadas
         df_estilizado = df_exibicao.style.apply(aplicar_cores_corpo, axis=None)
         st.dataframe(df_estilizado, use_container_width=True, hide_index=True)
 
