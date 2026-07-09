@@ -93,96 +93,105 @@ if not tem_filtro_ativo:
     st.stop()
 
 # ==========================================================
-# 🚀 6. CONSTRUÇÃO DA QUERY INTELIGENTE E INDEPENDENTE HÍBRIDA
+# 🚀 6. CONSTRUÇÃO DA QUERY INTELIGENTE INDEPENDENTE (FULL COMPARTILHADO)
 # ==========================================================
 with st.spinner("Buscando e cruzando visões comerciais..."):
     try:
-        df_rm_bruto = pd.DataFrame()
-        df_vinculo = pd.DataFrame()
-        df_pc_bruto = pd.DataFrame()
+        # 📐 A. BUSCA NA VIEW DE REQUISIÇÕES (RM) - Traz as RMs baseadas nos filtros
+        query_rm = supabase.table("vw_approvo_rm").select("*")
+        if buscar_rm:
+            query_rm = query_rm.eq("rm", str(buscar_rm))
+        if filtro_req != "Todos":
+            query_rm = query_rm.eq("nome_solicitante", filtro_req)
+        if filtro_status_rm != "Todos":
+            mapa_invertido = {"Aprovado": "A", "Em Aprovação": "E", "Reprovado": "R"}
+            query_rm = query_rm.eq("status_documento", mapa_invertido[filtro_status_rm])
+            
+        res_rm = query_rm.limit(500).execute()
+        df_rm_bruto = pd.DataFrame(res_rm.data)
 
-        # Identifica se o usuário está buscando critérios com foco na RM ou no Pedido
-        foco_na_rm = buscar_rm or filtro_req != "Todos" or filtro_status_rm != "Todos" or len(filtro_periodo) == 2
+        # 📐 B. BUSCA NA TABELA DE VÍNCULO PEDIDO_COMPRA
+        # Extrai as RMs localizadas para ver se elas já possuem vínculos com pedidos
+        lista_rms_encontradas = []
+        if not df_rm_bruto.empty and "rm" in df_rm_bruto.columns:
+            lista_rms_encontradas = [int(float(x)) for x in df_rm_bruto["rm"].unique() if pd.notna(x)]
 
-        if foco_na_rm:
-            # 📐 CAMINHO A: Filtro foca na RM -> Busca RM primeiro (Otimizado)
-            query_rm = supabase.table("vw_approvo_rm").select("*")
-            if buscar_rm:
-                query_rm = query_rm.eq("rm", str(buscar_rm))
-            if filtro_req != "Todos":
-                query_rm = query_rm.eq("nome_solicitante", filtro_req)
-            if filtro_status_rm != "Todos":
-                mapa_invertido = {"Aprovado": "A", "Em Aprovação": "E", "Reprovado": "R"}
-                query_rm = query_rm.eq("status_documento", mapa_invertido[filtro_status_rm])
-                
-            res_rm = query_rm.limit(500).execute()
-            df_rm_bruto = pd.DataFrame(res_rm.data)
+        query_vinculo = supabase.table("pedido_compra").select("rm", "pedido")
+        if buscar_rm:
+            query_vinculo = query_vinculo.eq("rm", int(buscar_rm) if str(buscar_rm).isdigit() else 0)
+        elif lista_rms_encontradas:
+            query_vinculo = query_vinculo.in_("rm", lista_rms_encontradas)
+            
+        res_vinculo = query_vinculo.execute()
+        df_vinculo = pd.DataFrame(res_vinculo.data)
 
-            if not df_rm_bruto.empty and "rm" in df_rm_bruto.columns:
-                lista_rms = list(set([int(float(x)) for x in df_rm_bruto["rm"].unique() if pd.notna(x)]))
-                if lista_rms:
-                    res_vinculo = supabase.table("pedido_compra").select("rm", "pedido").in_("rm", lista_rms).execute()
-                    df_vinculo = pd.DataFrame(res_vinculo.data)
+        # Coleta os IDs de pedidos vinculados
+        lista_peds_vinculados = []
+        if not df_vinculo.empty and "pedido" in df_vinculo.columns:
+            lista_peds_vinculados = [str(int(float(x))) for x in df_vinculo["pedido"].unique() if pd.notna(x)]
 
-            if not df_vinculo.empty and "pedido" in df_vinculo.columns:
-                lista_peds = list(set([str(int(float(x))) for x in df_vinculo["pedido"].unique() if pd.notna(x)]))
-                if lista_peds:
-                    query_pc = supabase.table("vw_approvo_pc").select("*").in_("pedido", lista_peds)
-                    if filtro_comp != "Todos":
-                        query_pc = query_pc.eq("nome_solicitante", filtro_comp)
-                    res_pc = query_pc.execute()
-                    df_pc_bruto = pd.DataFrame(res_pc.data)
-
-        else:
-            # 📐 CAMINHO B: Filtro foca no Pedido -> Busca PC primeiro (Otimizado)
-            query_pc = supabase.table("vw_approvo_pc").select("*")
+        # 📐 C. BUSCA NA VIEW DE PEDIDOS (PC)
+        query_pc = supabase.table("vw_approvo_pc").select("*")
+        
+        # Se veio filtro de comprador ou status de PC, faz busca ampla. Caso contrário, busca cirúrgica pelas pontes.
+        if filtro_comp != "Todos" or filtro_status_pc != "Todos":
             if filtro_comp != "Todos":
                 query_pc = query_pc.eq("nome_solicitante", filtro_comp)
             if filtro_status_pc != "Todos":
                 mapa_invertido = {"Aprovado": "A", "Em Aprovação": "E", "Reprovado": "R"}
                 query_pc = query_pc.eq("status_documento", mapa_invertido[filtro_status_pc])
-                
-            res_pc = query_pc.limit(500).execute()
-            df_pc_bruto = pd.DataFrame(res_pc.data)
+        elif lista_peds_vinculados:
+            query_pc = query_pc.in_("pedido", lista_peds_vinculados)
+        else:
+            # Se não há filtros de PC e nem RMs com vínculos, força o PC bruto a ficar vazio para não travar
+            query_pc = query_pc.none()
+            
+        res_pc = query_pc.limit(500).execute()
+        df_pc_bruto = pd.DataFrame(res_pc.data)
 
-            if not df_pc_bruto.empty and "pedido" in df_pc_bruto.columns:
-                lista_peds = list(set([int(float(x)) for x in df_pc_bruto["pedido"].unique() if pd.notna(x)]))
-                if lista_peds:
-                    res_vinculo = supabase.table("pedido_compra").select("rm", "pedido").in_("pedido", lista_peds).execute()
-                    df_vinculo = pd.DataFrame(res_vinculo.data)
-
-            if not df_vinculo.empty and "rm" in df_vinculo.columns:
-                lista_rms = list(set([int(float(x)) for x in df_vinculo["rm"].unique() if pd.notna(x)]))
-                if lista_rms:
-                    query_rm = supabase.table("vw_approvo_rm").select("*").in_("rm", lista_rms)
-                    res_rm = query_rm.execute()
-                    df_rm_bruto = pd.DataFrame(res_rm.data)
-
-        # Remove a coluna JSONB problemática se ela vier em qualquer um dos fluxos
         if not df_pc_bruto.empty and "entregas_agendadas" in df_pc_bruto.columns:
             df_pc_bruto.drop(columns=["entregas_agendadas"], inplace=True)
 
-        # Se o usuário digitou uma RM e ela não tem fluxo no Approvo, cria linha artificial para o PC não sumir
-        if df_rm_bruto.empty and buscar_rm and not df_pc_bruto.empty:
+        # Se o usuário digitou uma RM e ela não existe no Approvo, garante a linha base
+        if df_rm_bruto.empty and buscar_rm:
             df_rm_bruto = pd.DataFrame([{"rm": int(buscar_rm)}])
 
         if df_pc_bruto.empty and df_rm_bruto.empty:
             st.warning("⚠️ Nenhum registro correspondente aos critérios selecionados.")
             st.stop()
 
-
-                # ==========================================================
-        # 🔄 7. LOGÍSTICA DE UNIFICAÇÃO (MERGE INVERSO: PC COMO BASE)
         # ==========================================================
+        # 🔄 7. LOGÍSTICA DE UNIFICAÇÃO (MÁGICA DO OUTER JOIN COMPLETO)
+        # ==========================================================
+        # 1. Prepara e limpa a visão da RM
+        if not df_rm_bruto.empty:
+            df_rm_bruto["rm_str"] = df_rm_bruto["rm"].fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
+            df_rm_bruto["mat_str"] = df_rm_bruto["mat"].fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
+            colunas_vitais_rm = ["nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "rm_str", "mat_str"]
+            colunas_existentes_rm = [c for c in colunas_vitais_rm if c in df_rm_bruto.columns]
+            df_rm_limpo = df_rm_bruto[colunas_existentes_rm].drop_duplicates().copy()
+        else:
+            df_rm_limpo = pd.DataFrame(columns=["rm_str", "mat_str", "nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador"])
+
+        # 2. Prepara e limpa a tabela de vínculo intermediária
+        if not df_vinculo.empty:
+            df_vinculo["rm_str"] = df_vinculo["rm"].fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
+            df_vinculo["pedido_str"] = df_vinculo["pedido"].fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
+            # Conecta o número da RM com o número do Pedido físico
+            df_rm_consolidada = pd.merge(df_rm_limpo, df_vinculo[["rm_str", "pedido_str"]], on="rm_str", how="outer")
+        else:
+            df_rm_consolidada = df_rm_limpo.copy()
+            df_rm_consolidada["pedido_str"] = ""
+
+        # 3. Prepara e limpa a visão de Pedidos de Compra (PC)
         if not df_pc_bruto.empty:
             df_pc_bruto["pedido_str"] = df_pc_bruto["pedido"].fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
             df_pc_bruto["mat_str"] = df_pc_bruto["mat"].fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
-            
             colunas_vitais_pc = ["pedido_str", "mat_str", "nome_solicitante", "entrega", "quantidade", "status_documento", "data_ocorrencia", "nome_aprovador"]
             colunas_existentes_pc = [c for c in colunas_vitais_pc if c in df_pc_bruto.columns]
             
-            df_pc_base = df_pc_bruto[colunas_existentes_pc].drop_duplicates().copy()
-            df_pc_base.rename(columns={
+            df_pc_limpo = df_pc_bruto[colunas_existentes_pc].drop_duplicates().copy()
+            df_pc_limpo.rename(columns={
                 "nome_solicitante": "comprador",
                 "status_documento": "status_pc",
                 "data_oficial_ocorrencia": "data_ocorrencia_pc",
@@ -191,48 +200,41 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                 "quantidade": "quantidade_comprada"
             }, inplace=True, errors="ignore")
         else:
-            df_pc_base = pd.DataFrame(columns=["pedido_str", "mat_str", "comprador", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"])
+            df_pc_limpo = pd.DataFrame(columns=["pedido_str", "mat_str", "comprador", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"])
 
-        if not df_vinculo.empty:
-            df_vinculo["rm_str"] = df_vinculo["rm"].fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
-            df_vinculo["pedido_str"] = df_vinculo["pedido"].fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
-            df_pc_consolidado = pd.merge(df_pc_base, df_vinculo[["pedido_str", "rm_str"]], on="pedido_str", how="left")
-        else:
-            df_pc_consolidado = df_pc_base.copy()
-            df_pc_consolidado["rm_str"] = ""
+        # 4. EXECUTA O OUTER JOIN PERFEITO POR NÚMERO DE PEDIDO E MATERIAL
+        # Remove espaços em branco invisíveis antes do cruzamento final
+        df_rm_consolidada["pedido_str"] = df_rm_consolidada["pedido_str"].astype(str).str.strip()
+        df_rm_consolidada["mat_str"] = df_rm_consolidada["mat_str"].astype(str).str.strip()
+        df_pc_limpo["pedido_str"] = df_pc_limpo["pedido_str"].astype(str).str.strip()
+        df_pc_limpo["mat_str"] = df_pc_limpo["mat_str"].astype(str).str.strip()
 
-        if not df_rm_bruto.empty:
-            df_rm_bruto["rm_str"] = df_rm_bruto["rm"].fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
-            df_rm_bruto["mat_str"] = df_rm_bruto["mat"].fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
-            
-            colunas_vitais_rm = ["nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "rm_str", "mat_str"]
-            colunas_existentes_rm = [c for c in colunas_vitais_rm if c in df_rm_bruto.columns]
-            df_rm_limpo = df_rm_bruto[colunas_existentes_rm].drop_duplicates().copy()
-            
-            df_final = pd.merge(df_pc_consolidado, df_rm_limpo, on=["rm_str", "mat_str"], how="left")
-        else:
-            df_final = df_pc_consolidado.copy()
-            for col in ["nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador"]:
-                df_final[col] = None
+        # 🔥 A MÁGICA: 'how="outer"' garante que se houver apenas RM ou apenas PC, o dado sobrevive na tela!
+        df_final = pd.merge(df_rm_consolidada, df_pc_limpo, on=["pedido_str", "mat_str"], how="outer")
 
+        # 5. Preenche as lacunas visuais das chaves para registros isolados
         df_final["rm"] = df_final["rm"].fillna(df_final["rm_str"])
         df_final["mat"] = df_final["mat"].fillna(df_final["mat_str"])
-        df_final["nome_solicitante"] = df_final["nome_solicitante"].fillna("RM Sem Fluxo Approvo")
-        df_final["desc_item"] = df_final["desc_item"].fillna("Direto p/ Compras")
+        
+        # Regra de negócio para linhas órfãs de RM (Pedidos diretos de compra)
+        df_final["nome_solicitante"] = df_final["nome_solicitante"].apply(lambda x: "RM Sem Fluxo Approvo" if pd.isna(x) or str(x).strip() in ["", "nan"] else x)
+        df_final["desc_item"] = df_final["desc_item"].apply(lambda x: "Direto p/ Compras" if pd.isna(x) or str(x).strip() in ["", "nan"] else x)
 
+        # Re-aplica filtros combinados rígidos em nível de memória sobre o DataFrame consolidado final
         if buscar_rm:
             df_final = df_final[df_final["rm_str"] == str(buscar_rm).strip()]
         if filtro_req != "Todos":
             df_final = df_final[df_final["nome_solicitante"].astype(str).str.strip() == str(filtro_req).strip()]
-        if filtro_status_rm != "Todos":
+        if filtro_comp != "Todos":
+            df_final = df_final[df_final["comprador"].astype(str).str.strip() == str(filtro_comp).strip()]
+        if filtro_status_pc != "Todos":
             mapa_invertido = {"Aprovado": "A", "Em Aprovação": "E", "Reprovado": "R"}
-            df_final = df_final[df_final["status_documento"].astype(str).str.strip() == mapa_invertido[filtro_status_rm]]
+            df_final = df_final[df_final["status_pc"].astype(str).str.strip().str.upper() == mapa_invertido[filtro_status_pc].upper()]
 
         if "mat" in df_final.columns and "rm" in df_final.columns:
             df_final = df_final.drop_duplicates(subset=["rm", "mat"]).copy()
         else:
             df_final = df_final.drop_duplicates().copy()
-
 
         # ==========================================================
         # 🚨 7.5 PROCESSAMENTO SEGURO DE DATAS E CÁLCULO DE ATRASO
