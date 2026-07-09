@@ -93,62 +93,83 @@ if not tem_filtro_ativo:
     st.stop()
 
 # ==========================================================
-# 🚀 6. CONSTRUÇÃO DA QUERY INTELIGENTE GLOBO-CENTRAL (PC FIRST)
+# 🚀 6. CONSTRUÇÃO DA QUERY INTELIGENTE E INDEPENDENTE HÍBRIDA
 # ==========================================================
 with st.spinner("Buscando e cruzando visões comerciais..."):
     try:
-        query_pc = supabase.table("vw_approvo_pc").select("*")
-        
-        if filtro_comp != "Todos":
-            query_pc = query_pc.eq("nome_solicitante", filtro_comp)
-        if filtro_status_pc != "Todos":
-            mapa_invertido = {"Aprovado": "A", "Em Aprovação": "E", "Reprovado": "R"}
-            query_pc = query_pc.eq("status_documento", mapa_invertido[filtro_status_pc])
-            
-        res_pc = query_pc.limit(500).execute()
-        df_pc_bruto = pd.DataFrame(res_pc.data)
-
-        lista_pedidos_encontrados = []
-        if not df_pc_bruto.empty and "pedido" in df_pc_bruto.columns:
-            for p in df_pc_bruto["pedido"].unique():
-                if pd.notna(p) and str(p).strip() not in ["", "---", "nan", "None"]:
-                    lista_pedidos_encontrados.append(str(int(float(p))))
-                    
-            if "entregas_agendadas" in df_pc_bruto.columns:
-                df_pc_bruto.drop(columns=["entregas_agendadas"], inplace=True)
-
-        df_vinculo = pd.DataFrame()
-        lista_rms_ponte = []
-        if lista_pedidos_encontrados:
-            res_vinculo = supabase.table("pedido_compra").select("rm", "pedido").in_("pedido", lista_pedidos_encontrados).execute()
-            df_vinculo = pd.DataFrame(res_vinculo.data)
-            
-            if not df_vinculo.empty and "rm" in df_vinculo.columns:
-                lista_rms_ponte = list(set([int(float(x)) for x in df_vinculo["rm"] if pd.notna(x)]))
-
         df_rm_bruto = pd.DataFrame()
-        query_rm = supabase.table("vw_approvo_rm").select("*")
-        
-        if buscar_rm:
-            query_rm = query_rm.eq("rm", str(buscar_rm))
-        elif lista_rms_ponte:
-            query_rm = query_rm.in_("rm", lista_rms_ponte)
-        
-        if filtro_req != "Todos":
-            query_rm = query_rm.eq("nome_solicitante", filtro_req)
-        if filtro_status_rm != "Todos":
-            mapa_invertido = {"Aprovado": "A", "Em Aprovação": "E", "Reprovado": "R"}
-            query_rm = query_rm.eq("status_documento", mapa_invertido[filtro_status_rm])
-            
-        res_rm = query_rm.execute()
-        df_rm_bruto = pd.DataFrame(res_rm.data)
+        df_vinculo = pd.DataFrame()
+        df_pc_bruto = pd.DataFrame()
 
-        if df_rm_bruto.empty and buscar_rm:
+        # Identifica se o usuário está buscando critérios com foco na RM ou no Pedido
+        foco_na_rm = buscar_rm or filtro_req != "Todos" or filtro_status_rm != "Todos" or len(filtro_periodo) == 2
+
+        if foco_na_rm:
+            # 📐 CAMINHO A: Filtro foca na RM -> Busca RM primeiro (Otimizado)
+            query_rm = supabase.table("vw_approvo_rm").select("*")
+            if buscar_rm:
+                query_rm = query_rm.eq("rm", str(buscar_rm))
+            if filtro_req != "Todos":
+                query_rm = query_rm.eq("nome_solicitante", filtro_req)
+            if filtro_status_rm != "Todos":
+                mapa_invertido = {"Aprovado": "A", "Em Aprovação": "E", "Reprovado": "R"}
+                query_rm = query_rm.eq("status_documento", mapa_invertido[filtro_status_rm])
+                
+            res_rm = query_rm.limit(500).execute()
+            df_rm_bruto = pd.DataFrame(res_rm.data)
+
+            if not df_rm_bruto.empty and "rm" in df_rm_bruto.columns:
+                lista_rms = list(set([int(float(x)) for x in df_rm_bruto["rm"].unique() if pd.notna(x)]))
+                if lista_rms:
+                    res_vinculo = supabase.table("pedido_compra").select("rm", "pedido").in_("rm", lista_rms).execute()
+                    df_vinculo = pd.DataFrame(res_vinculo.data)
+
+            if not df_vinculo.empty and "pedido" in df_vinculo.columns:
+                lista_peds = list(set([str(int(float(x))) for x in df_vinculo["pedido"].unique() if pd.notna(x)]))
+                if lista_peds:
+                    query_pc = supabase.table("vw_approvo_pc").select("*").in_("pedido", lista_peds)
+                    if filtro_comp != "Todos":
+                        query_pc = query_pc.eq("nome_solicitante", filtro_comp)
+                    res_pc = query_pc.execute()
+                    df_pc_bruto = pd.DataFrame(res_pc.data)
+
+        else:
+            # 📐 CAMINHO B: Filtro foca no Pedido -> Busca PC primeiro (Otimizado)
+            query_pc = supabase.table("vw_approvo_pc").select("*")
+            if filtro_comp != "Todos":
+                query_pc = query_pc.eq("nome_solicitante", filtro_comp)
+            if filtro_status_pc != "Todos":
+                mapa_invertido = {"Aprovado": "A", "Em Aprovação": "E", "Reprovado": "R"}
+                query_pc = query_pc.eq("status_documento", mapa_invertido[filtro_status_pc])
+                
+            res_pc = query_pc.limit(500).execute()
+            df_pc_bruto = pd.DataFrame(res_pc.data)
+
+            if not df_pc_bruto.empty and "pedido" in df_pc_bruto.columns:
+                lista_peds = list(set([int(float(x)) for x in df_pc_bruto["pedido"].unique() if pd.notna(x)]))
+                if lista_peds:
+                    res_vinculo = supabase.table("pedido_compra").select("rm", "pedido").in_("pedido", lista_peds).execute()
+                    df_vinculo = pd.DataFrame(res_vinculo.data)
+
+            if not df_vinculo.empty and "rm" in df_vinculo.columns:
+                lista_rms = list(set([int(float(x)) for x in df_vinculo["rm"].unique() if pd.notna(x)]))
+                if lista_rms:
+                    query_rm = supabase.table("vw_approvo_rm").select("*").in_("rm", lista_rms)
+                    res_rm = query_rm.execute()
+                    df_rm_bruto = pd.DataFrame(res_rm.data)
+
+        # Remove a coluna JSONB problemática se ela vier em qualquer um dos fluxos
+        if not df_pc_bruto.empty and "entregas_agendadas" in df_pc_bruto.columns:
+            df_pc_bruto.drop(columns=["entregas_agendadas"], inplace=True)
+
+        # Se o usuário digitou uma RM e ela não tem fluxo no Approvo, cria linha artificial para o PC não sumir
+        if df_rm_bruto.empty and buscar_rm and not df_pc_bruto.empty:
             df_rm_bruto = pd.DataFrame([{"rm": int(buscar_rm)}])
 
         if df_pc_bruto.empty and df_rm_bruto.empty:
-            st.warning("⚠️ Nenhum registro localizado para os critérios selecionados.")
+            st.warning("⚠️ Nenhum registro correspondente aos critérios selecionados.")
             st.stop()
+
 
                 # ==========================================================
         # 🔄 7. LOGÍSTICA DE UNIFICAÇÃO (MERGE INVERSO: PC COMO BASE)
