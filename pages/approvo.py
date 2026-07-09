@@ -248,10 +248,9 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             df_final = df_final.drop_duplicates().copy()
 
                 # ==========================================================
-        # 🚨 7.5 PROCESSAMENTO SEGURO DE DATAS E CÁLCULO DE ATRASO (BLINDAGEM DA RAIZ)
+        # 🚨 7.5 PROCESSAMENTO SEGURO DE DATAS E CÁLCULO DE ATRASO
         # ==========================================================
-        # 🔥 FIX DEFINITIVO: Forçamos o 'errors="coerce"' IMEDIATAMENTE na criação das variáveis de cálculo.
-        # Qualquer traço '---' ou 'Data não informada' do banco vira nulo matemático (NaT) e não quebra o sistema!
+        # Criamos vetores isolados em formato datetime puro forçando NaT em qualquer string inválida
         dt_entrega_puro = pd.to_datetime(df_final["entrega"], errors="coerce")
         dt_necessidade_puro = pd.to_datetime(df_final["data_necessidade"], errors="coerce")
         dt_emissao_puro = pd.to_datetime(df_final["data_emissao"], errors="coerce")
@@ -260,7 +259,6 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             dt_ent = dt_entrega_puro.loc[idx]
             dt_nec = dt_necessidade_puro.loc[idx]
             
-            # Se faltar qualquer uma das duas datas, responde com o texto padrão do negócio
             if pd.isna(dt_ent) or pd.isna(dt_nec):
                 return "Data não informada"
                 
@@ -272,13 +270,13 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             except Exception:
                 return "Data não informada"
 
-        # Executa o mapeamento de atrasos com base nos vetores limpos da memória
+        # Executa o cálculo usando os índices mapeados das séries isoladas
         df_final["alerta_data"] = df_final.index.map(calcular_atraso_seguro)
 
-        # Filtro de intervalo de período operando de forma 100% isolada e matemática
+        # Filtro de intervalo de período operando de forma 100% isolada e matemática pelos índices
         if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2:
-            data_inicio = pd.to_datetime(filtro_periodo[0])
-            data_fim = pd.to_datetime(filtro_periodo[1])
+            data_inicio = pd.to_datetime(filtro_periodo)
+            data_fim = pd.to_datetime(filtro_periodo)
             
             indices_validos = df_final.index[(dt_emissao_puro >= data_inicio) & (dt_emissao_puro <= data_fim)]
             df_final = df_final.loc[indices_validos].copy()
@@ -292,7 +290,7 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         df_final["necessidade_original_dt"] = pd.to_datetime(df_final["data_necessidade"], errors="coerce")
 
         # ==========================================================
-        # 📊 8. MAPEAMENTO, TRADUÇÃO E TEXTOS AMIGÁVEIS NAS COLUNAS
+        # 📊 8. MAPEAMENTO, TRADUÇÃO E PROCESSAMENTO COMPLETO DE STRINGS
         # ==========================================================
         mapa_status_extenso = {"A": "Aprovado", "E": "Em Aprovação", "R": "Reprovado", "---": "---"}
         
@@ -310,24 +308,21 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         if "quantidade_comprada" in df_final.columns:
             df_final["quantidade_comprada"] = pd.to_numeric(df_final["quantidade_comprada"], errors="coerce").fillna(0).astype(int)
 
-        # Formatação visual das datas na interface do usuário (Garante texto amigável se nulo)
-        def formatar_data_segura(serie, incluir_hora=False):
-            formato = "%d/%m/%Y %H:%M" if incluir_hora else "%d/%m/%Y"
-            convertido = pd.to_datetime(serie, errors="coerce")
-            return convertido.dt.strftime(formato).fillna("Data não informada")
+        # 🚨 SOLUÇÃO REAL CONTRA O ERRO DE DTYPE:
+        # Antes de injetar textos amigáveis, forçamos as colunas de data a virarem strings comuns (tipo 'object').
+        # Isso remove a tipagem datetime64 nativa e impede o Pandas de lançar exceções.
+        colunas_de_data = ["data_emissao", "data_necessidade", "entrega", "data_ocorrencia", "data_ocorrencia_pc"]
+        for col in colunas_de_data:
+            if col in df_final.columns:
+                # Converte os valores brutos para data e depois gera a string formatada de forma segura
+                convertido = pd.to_datetime(df_final[col], errors="coerce")
+                
+                if col in ["data_ocorrencia", "data_ocorrencia_pc"]:
+                    df_final[col] = convertido.dt.strftime("%d/%m/%Y %H:%M").fillna("Data não informada").astype(str)
+                else:
+                    df_final[col] = convertido.dt.strftime("%d/%m/%Y").fillna("Data não informada").astype(str)
 
-        if "data_emissao" in df_final.columns:
-            df_final["data_emissao"] = formatar_data_segura(df_final["data_emissao"])
-        if "data_necessidade" in df_final.columns:
-            df_final["data_necessidade"] = formatar_data_segura(df_final["data_necessidade"])
-        if "entrega" in df_final.columns:
-            df_final["entrega"] = formatar_data_segura(df_final["entrega"])
-            
-        if "data_ocorrencia" in df_final.columns:
-            df_final["data_ocorrencia"] = formatar_data_segura(df_final["data_ocorrencia"], incluir_hora=True)
-        if "data_ocorrencia_pc" in df_final.columns:
-            df_final["data_ocorrencia_pc"] = formatar_data_segura(df_final["data_ocorrencia_pc"], incluir_hora=True)
-
+        # Tratamento final de nulos genéricos para as demais colunas de texto (Apenas no final!)
         df_final.fillna("---", inplace=True)
         df_final.replace("nan", "---", inplace=True)
 
@@ -362,18 +357,15 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         df_exibicao = df_final[colunas_existentes].copy()
         df_exibicao.columns = pd.MultiIndex.from_tuples([colunas_multi_index[c] for c in colunas_existentes])
 
-
         # ==========================================================
         # 🎨 9. LAYOUT CROMÁTICO (PALETA PASTEL COMPLETA)
         # ==========================================================
         def aplicar_cores_corpo(df):
             estilos = pd.DataFrame('', index=df.index, columns=df.columns)
             for col in df.columns:
-                grupo = col[0] # Nível 0 do MultiIndex (Super Cabeçalho)
+                grupo = col # Nível 0 do MultiIndex (Super Cabeçalho)
                 
-                # Resgata a checagem de atraso calculada na etapa 7.5 de forma segura
-                idx = estilos.index
-                for i in idx:
+                for i in df.index:
                     alerta = str(df_final.loc[i, "alerta_data"]).lower()
                     tem_atraso = "atraso" in alerta
                     
@@ -414,3 +406,4 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
 
     except Exception as e:
         st.error(f"❌ Erro crítico ao consolidar as visões no Cenário D: {e}")
+
