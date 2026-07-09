@@ -275,19 +275,24 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
 
         # Filtro de intervalo de período operando de forma 100% isolada e matemática pelos índices
         if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2:
-            data_inicio = pd.to_datetime(filtro_periodo)
-            data_fim = pd.to_datetime(filtro_periodo)
+            # 🔍 FIX DEFINITIVO: Extrai os dois valores e valida se não são nulos antes de rodar o merge horizontal
+            d_ini = filtro_periodo[0]
+            d_fim = filtro_periodo[1]
             
-            indices_validos = df_final.index[(dt_emissao_puro >= data_inicio) & (dt_emissao_puro <= data_fim)]
-            df_final = df_final.loc[indices_validos].copy()
+            if pd.notna(d_ini) and pd.notna(d_fim):
+                data_inicio = pd.to_datetime(d_ini)
+                data_fim = pd.to_datetime(d_fim)
+                
+                # Aplica o filtro de intervalo usando os índices estáveis do vetor isolado na memória
+                indices_validos = df_final.index[(dt_emissao_puro >= data_inicio) & (dt_emissao_puro <= data_fim)]
+                df_final = df_final.loc[indices_validos].copy()
 
         if df_final.empty:
             st.warning("⚠️ Nenhum registro corresponde aos critérios selecionados.")
             st.stop()
-
         # Guardamos cópias estáveis dos vetores datetime puros para a pintura de linhas na Etapa 9
-        df_final["entrega_original_dt"] = pd.to_datetime(df_final["entrega"], errors="coerce")
-        df_final["necessidade_original_dt"] = pd.to_datetime(df_final["data_necessidade"], errors="coerce")
+        #df_final["entrega_original_dt"] = pd.to_datetime(df_final["entrega"], errors="coerce")
+        #df_final["necessidade_original_dt"] = pd.to_datetime(df_final["data_necessidade"], errors="coerce")
 
         # ==========================================================
         # 📊 8. MAPEAMENTO, TRADUÇÃO E PROCESSAMENTO COMPLETO DE STRINGS
