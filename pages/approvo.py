@@ -162,7 +162,6 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             for c in df_rm_bruto.columns:
                 df_rm_bruto[c] = df_rm_bruto[c].astype(str).str.replace('.0', '', regex=False).str.strip()
             
-            # 🚨 GARGALO BLOQUEADO: Se por flutuação do banco alguma chave vital sumir, garante sua existência
             if "rm" not in df_rm_bruto.columns: df_rm_bruto["rm"] = "---"
             if "mat" not in df_rm_bruto.columns: df_rm_bruto["mat"] = "---"
             
@@ -210,10 +209,40 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         else:
             df_pc_limpo = pd.DataFrame(columns=["pedido_str", "mat_str", "comprador", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"])
 
-                # ==========================================================
+        # Força as chaves de cruzamento para strings limpas sem chance de inferência automática do Pandas
+        df_rm_consolidada["pedido_str"] = df_rm_consolidada["pedido_str"].astype(str).str.strip()
+        df_rm_consolidada["mat_str"] = df_rm_consolidada["mat_str"].astype(str).str.strip()
+        df_pc_limpo["pedido_str"] = df_pc_limpo["pedido_str"].astype(str).str.strip()
+        df_pc_limpo["mat_str"] = df_pc_limpo["mat_str"].astype(str).str.strip()
+
+        # 🔥 CRIAÇÃO DO DF_FINAL EM MODO OUTER JOIN (TEXTO PURO)
+        df_final = pd.merge(df_rm_consolidada, df_pc_limpo, on=["pedido_str", "mat_str"], how="outer")
+
+        # Ajusta chaves para as linhas órfãs geradas pela junção
+        if "rm" in df_final.columns and "rm_str" in df_final.columns:
+            df_final["rm"] = df_final["rm"].fillna(df_final["rm_str"])
+        if "mat" in df_final.columns and "mat_str" in df_final.columns:
+            df_final["mat"] = df_final["mat"].fillna(df_final["mat_str"])
+
+        # Aplica filtros combinados rígidos em texto limpo sobre a memória final
+        if buscar_rm:
+            df_final = df_final[df_final["rm_str"] == str(buscar_rm).strip()]
+        if filtro_req != "Todos":
+            df_final = df_final[df_final["nome_solicitante"].astype(str).str.strip() == str(filtro_req).strip()]
+        if filtro_comp != "Todos":
+            df_final = df_final[df_final["comprador"].astype(str).str.strip() == str(filtro_comp).strip()]
+        if filtro_status_pc != "Todos":
+            mapa_invertido = {"Aprovado": "A", "Em Aprovação": "E", "Reprovado": "R"}
+            df_final = df_final[df_final["status_pc"].astype(str).str.strip().str.upper() == mapa_invertido[filtro_status_pc].upper()]
+
+        # Trava anti-duplicidade em formato string pura
+        df_final["rm_mat_key"] = df_final["rm"].astype(str) + "_" + df_final["mat"].astype(str)
+        df_final = df_final.drop_duplicates(subset=["rm_mat_key"]).copy()
+
+        # ==========================================================
         # 🚨 7.5 PROCESSAMENTO SEGURO DE DATAS E CÁLCULO DE ATRASO
         # ==========================================================
-        # 1. Primeiro criamos as séries de data com base no df_final que veio do Merge da Etapa 7
+        # Extraímos séries isoladas nativas da memória forçando NaT (nulo de data) em qualquer texto inválido
         dt_entrega_puro = pd.to_datetime(df_final["entrega"], errors="coerce")
         dt_necessidade_puro = pd.to_datetime(df_final["data_necessidade"], errors="coerce")
         dt_emissao_puro = pd.to_datetime(df_final["data_emissao"], errors="coerce")
@@ -237,7 +266,6 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                 except Exception:
                     lista_alertas_data.append("Data não informada")
 
-        # 2. Agora salvamos a lista de alertas calculada na coluna definitiva
         df_final["alerta_data"] = lista_alertas_data
 
         # Filtro de intervalo de período operando de forma 100% isolada e cronológica
@@ -259,10 +287,8 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             st.warning("⚠️ Nenhum registro corresponde aos critérios selecionados.")
             st.stop()
 
-        # Guarda os vetores datetime puros para a pintura de linhas na Etapa 9
         df_final["entrega_original_dt"] = dt_entrega_puro
         df_final["necessidade_original_dt"] = dt_necessidade_puro
-
 
                 # ==========================================================
         # 📊 8. MAPEAMENTO, TRADUÇÃO E TEXTOS AMIGÁVEIS NAS COLUNAS
