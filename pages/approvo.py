@@ -315,19 +315,16 @@ mapa_status_extenso = {"A": "Aprovado", "E": "Em Aprovação", "R": "Reprovado",
 
 if "status_documento" in df_final.columns:
     df_final["status_documento"] = df_final["status_documento"].map(
-        lambda x: mapa_status_extenso.get(str(x).strip().upper(), "---") 
-        if pd.notna(x) and str(x) not in ["nan", "None", "---"] else "---"
+        lambda x: mapa_status_extenso.get(str(x).strip().upper(), "---") if pd.notna(x) else "---"
     )
 if "status_pc" in df_final.columns:
     df_final["status_pc"] = df_final["status_pc"].map(
-        lambda x: mapa_status_extenso.get(str(x).strip().upper(), "---") 
-        if pd.notna(x) and str(x) not in ["nan", "None", "---"] else "---"
+        lambda x: mapa_status_extenso.get(str(x).strip().upper(), "---") if pd.notna(x) else "---"
     )
 
 df_final["qtd_solicitada"] = pd.to_numeric(df_final["qtd_solicitada"], errors="coerce").fillna(0).astype(int)
 df_final["quantidade_comprada"] = pd.to_numeric(df_final["quantidade_comprada"], errors="coerce").fillna(0).astype(int)
 
-# Formatação visual das datas para Strings normais (tipo 'object')
 def formatar_visual_seguro(valor, incluir_hora=False):
     if pd.isna(valor) or str(valor).strip() in ["", "---", "nan", "None", "NaT"]: 
         return "Data não informada"
@@ -335,8 +332,8 @@ def formatar_visual_seguro(valor, incluir_hora=False):
         if hasattr(valor, "strftime"): 
             return valor.strftime("%d/%m/%Y %H:%M" if incluir_hora else "%d/%m/%Y")
         t_str = str(valor).strip().split(" ")
-        if "-" in t_str:
-            dt = datetime.datetime.strptime(t_str, "%Y-%m-%d")
+        if "-" in t_str[0]:
+            dt = datetime.datetime.strptime(t_str[0], "%Y-%m-%d")
             return dt.strftime("%d/%m/%Y")
         return valor
     except Exception: 
@@ -360,50 +357,56 @@ df_final.replace("None", "---", inplace=True)
 
 # LISTA DE ORDEM EXATA DOS EIXOS GLOBAIS (19 COLUNAS OFICIAIS)
 ordem_colunas_exibicao = [
-            "nome_solicitante", "rm", "mat", "desc_item", "qtd_solicitada", "data_emissao", "data_necessidade",
-            "status_documento", "data_ocorrencia", "nome_aprovador",
-            "comprador", "pedido_str", "entrega", "quantidade_comprada",
-            "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc",
-            "sit_item", "alerta_data"
-        ]
+    "nome_solicitante", "rm", "mat", "desc_item", "qtd_solicitada", "data_emissao", "data_necessidade",
+    "status_documento", "data_ocorrencia", "nome_aprovador",
+    "comprador", "pedido_str", "entrega", "quantidade_comprada",
+    "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc",
+    "sit_item", "alerta_data"
+]
 
-# DICIONÁRIO DE TUPLAS DO MULTIINDEX (19 ELEMENTOS MA-TE-MÁ-TI-COS)
+# DICIONÁRIO DE TUPLAS DO MULTIINDEX (19 ELEMENTOS MATEMÁTICOS DE COMBINAÇÃO)
 colunas_multi_index = {
-            "nome_solicitante":   ("REQUISICAO DE MATERIAL MEGA", "Requisitante"),
-            "rm":                 ("REQUISICAO DE MATERIAL MEGA", "Nr. RM"),
-            "mat":                ("REQUISICAO DE MATERIAL MEGA", "Nr. Material"),
-            "desc_item":          ("REQUISICAO DE MATERIAL MEGA", "Descrição"),
-            "qtd_solicitada":     ("REQUISICAO DE MATERIAL MEGA", "Qt. Sol."),
-            "data_emissao":       ("REQUISICAO DE MATERIAL MEGA", "Data da Requisição"),
-            "data_necessidade":   ("REQUISICAO DE MATERIAL MEGA", "Data da Nec."),
-            
-            "status_documento":   ("APPROVAL (RM)", "Status da Aprovação"),
-            "data_ocorrencia":    ("APPROVAL (RM)", "Data da Aprovação"),
-            "nome_aprovador":     ("APPROVAL (RM)", "Aprovador"),
-            
-            "comprador":          ("PEDIDO DE COMPRA MEGA", "Comprador"),
-            "pedido_str":         ("PEDIDO DE COMPRA MEGA", "Nr. PC"),
-            "entrega":            ("PEDIDO DE COMPRA MEGA", "Data de Entrega"),
-            "quantidade_comprada":("PEDIDO DE COMPRA MEGA", "Qt. Compr."),
-            
-            "status_pc":          ("APPROVAL (PC)", "Status da Aprovação"),
-            "data_ocorrencia_pc": ("APPROVAL (PC)", "Data da Aprovação"),
-            "nome_aprovador_pc":  ("APPROVAL (PC)", "Aprovador"),
-            
-            "sit_item":           ("SITUAÇÃO DO ITEM", "Situação"),
-            "alerta_data":        ("ALERTA DE DATA", "Alerta de Entrega")
-        }
+    "nome_solicitante":   ("REQUISICAO DE MATERIAL MEGA", "Requisitante"),
+    "rm":                 ("REQUISICAO DE MATERIAL MEGA", "Nr. RM"),
+    "mat":                ("REQUISICAO DE MATERIAL MEGA", "Nr. Material"),
+    "desc_item":          ("REQUISICAO DE MATERIAL MEGA", "Descrição"),
+    "qtd_solicitada":     ("REQUISICAO DE MATERIAL MEGA", "Qt. Sol."),
+    "data_emissao":       ("REQUISICAO DE MATERIAL MEGA", "Data da Requisição"),
+    "data_necessidade":   ("REQUISICAO DE MATERIAL MEGA", "Data da Nec."),
+    
+    "status_documento":   ("APPROVAL (RM)", "Status da Aprovação"),
+    "data_ocorrencia":    ("APPROVAL (RM)", "Data da Aprovação"),
+    "nome_aprovador":     ("APPROVAL (RM)", "Aprovador"),
+    
+    "comprador":          ("PEDIDO DE COMPRA MEGA", "Comprador"),
+    "pedido_str":         ("PEDIDO DE COMPRA MEGA", "Nr. PC"),
+    "entrega":            ("PEDIDO DE COMPRA MEGA", "Data de Entrega"),
+    "quantidade_comprada":("PEDIDO DE COMPRA MEGA", "Qt. Compr."),
+    
+    "status_pc":          ("APPROVAL (PC)", "Status da Aprovação"),
+    "data_ocorrencia_pc": ("APPROVAL (PC)", "Data da Aprovação"),
+    "nome_aprovador_pc":  ("APPROVAL (PC)", "Aprovador"),
+    
+    "sit_item":           ("SITUAÇÃO DO ITEM", "Situação"),
+    "alerta_data":        ("ALERTA DE DATA", "Alerta de Entrega")
+}
 
-colunas_finais_validas = [c for c in ordem_colunas_exibicao if c in colunas_multi_index]
+# Dicionário de séries temporárias isoladas para limpar duplicidades ocultas
+series_exibicao = {}
+for c in ordem_colunas_exibicao:
+    if c in df_final.columns:
+        col_data = df_final[c]
+        if isinstance(col_data, pd.DataFrame):
+            series_exibicao[c] = col_data.iloc[:, 0].fillna("---").astype(str)
+        else:
+            series_exibicao[c] = col_data.fillna("---").astype(str)
+    else:
+        series_exibicao[c] = pd.Series("---", index=df_final.index, dtype=str)
 
-# Garante a existência física das colunas estruturadas no DataFrame antes de copiar
-for c in colunas_finais_validas:
-    if c not in df_final.columns:
-        df_final[c] = "---"
-
-# Extrai a tabela base e aplica as tuplas correspondentes com tamanho idêntico de eixos
-df_exibicao = df_final[colunas_finais_validas].copy()
-df_exibicao.columns = pd.MultiIndex.from_tuples([colunas_multi_index[c] for c in colunas_finais_validas])
+# 🔥 CONSTRUÇÃO DO PAINEL DIRETO POR DICIONÁRIO DE TUPLAS
+df_exibicao = pd.DataFrame({
+    colunas_multi_index[c]: series_exibicao[c] for c in ordem_colunas_exibicao
+})
 
 # ==========================================================
 # 🎨 9. LAYOUT CROMÁTICO (PALETA PASTEL COMPLETA)
