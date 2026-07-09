@@ -160,9 +160,9 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         if df_rm_bruto.empty and buscar_rm:
             df_rm_bruto = pd.DataFrame([{"rm": int(buscar_rm)}])
 
-        # 🚨 COLUNAS EXCLUSIVAS DE CADA VISÃO PARA IMPEDIR DUPLICIDADES NO OUTER JOIN
-        cols_exclusivas_rm = ["nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador"]
-        cols_exclusivas_pc = ["pedido", "mat", "nome_solicitante", "entrega", "quantidade", "status_documento", "data_ocorrencia", "nome_aprovador"]
+        # 🚨 FIX CIRÚRGICO 1: Adicionamos as chaves '_str' diretamente nas listas de preservação rígida
+        cols_exclusivas_rm = ["nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "rm_str", "mat_str"]
+        cols_exclusivas_pc = ["pedido", "mat", "nome_solicitante", "entrega", "quantidade", "status_documento", "data_ocorrencia", "nome_aprovador", "pedido_str", "mat_str"]
 
         if df_rm_bruto.empty: df_rm_bruto = pd.DataFrame(columns=cols_exclusivas_rm)
         if df_pc_bruto.empty: df_pc_bruto = pd.DataFrame(columns=cols_exclusivas_pc)
@@ -172,8 +172,8 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         # ==========================================================
         # 1. Limpeza e isolamento estrito da tabela de RMs
         df_rm_limpo = pd.DataFrame(index=df_rm_bruto.index)
-        for c in cols_exclusivas_rm:
-            if c in df_rm_bruto.columns:
+        for c in df_rm_bruto.columns:
+            if c in cols_exclusivas_rm:
                 s = df_rm_bruto[c].iloc[:, 0] if isinstance(df_rm_bruto[c], pd.DataFrame) else df_rm_bruto[c]
                 df_rm_limpo[c] = s.fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
         
@@ -191,7 +191,6 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             
             df_vinculo_limpo["rm_str"] = df_vinculo_limpo.get("rm", "---")
             df_vinculo_limpo["pedido_str"] = df_vinculo_limpo.get("pedido", "---")
-            # Faz o merge intermediário mantendo apenas o par de ligação
             df_rm_consolidada = pd.merge(df_rm_limpo, df_vinculo_limpo[["rm_str", "pedido_str"]], on="rm_str", how="outer")
         else:
             df_rm_consolidada = df_rm_limpo.copy()
@@ -199,17 +198,19 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
 
         # 3. Limpeza e isolamento estrito da tabela de Pedidos (PC)
         df_pc_limpo = pd.DataFrame(index=df_pc_bruto.index)
-        for c in cols_exclusivas_pc:
-            if c in df_pc_bruto.columns:
+        
+        # 🚨 FIX CIRÚRGICO 2: Injetamos as variáveis temporárias de string antes do loop de exclusão
+        df_pc_bruto["pedido_str"] = df_pc_bruto.get("pedido", "---")
+        df_pc_bruto["mat_str"] = df_pc_bruto.get("mat", "---")
+
+        for c in df_pc_bruto.columns:
+            if c in cols_exclusivas_pc:
                 s = df_pc_bruto[c].iloc[:, 0] if isinstance(df_pc_bruto[c], pd.DataFrame) else df_pc_bruto[c]
                 df_pc_limpo[c] = s.fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
         
-        df_pc_limpo["pedido_str"] = df_pc_limpo.get("pedido", "---")
-        df_pc_limpo["mat_str"] = df_pc_limpo.get("mat", "---")
-        
-        # Faz os rebatizados cirúrgicos das colunas exclusivas do PC para não colidirem com a RM
+        # Faz os rebatizados cirúrgicos das colunas exclusivas do PC
         df_pc_limpo.rename(columns={
-            "mat": "mat", 
+            "mat": "mat",
             "nome_solicitante": "comprador",
             "status_documento": "status_pc",
             "data_oficial_ocorrencia": "data_ocorrencia_pc",
