@@ -1,6 +1,7 @@
 import pandas as pd
 import streamlit as st
 import datetime
+import io
 
 def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_necessidade_dt_bruta):
     if "status_documento" in df_final.columns:
@@ -37,6 +38,21 @@ def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_
 
     df_exibicao = df_final[ordem_colunas_exibicao].copy()
     df_exibicao.columns = pd.MultiIndex.from_tuples([colunas_multi_index[c] for c in ordem_colunas_exibicao])
+
+    # 📥 BOTÃO EXECUTIVO DE DOWNLOAD DO EXCEL
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df_exibicao.to_excel(writer, index=False, sheet_name='Approvo Status')
+    dados_excel = output.getvalue()
+
+    st.download_button(
+        label="📥 Exportar Painel para o Excel (.xlsx)",
+        data=dados_excel,
+        file_name=f"approvo_status_{datetime.date.today().strftime('%Y%m%d')}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True
+    )
+    st.divider()
 
     def aplicar_cores_corpo(df):
         estilos = pd.DataFrame('', index=df.index, columns=df.columns)
