@@ -2,7 +2,7 @@ import streamlit as st
 import os
 from supabase import create_client
 
-# Importação dos módulos customizados
+# Importação dos sub-módulos limpos através do pacote init
 from utils.queries import executar_consultas_supabase
 from utils.processing import processar_e_unificar_dados
 from utils.styles import renderizar_grid_multiindex_colorido
@@ -36,7 +36,7 @@ except Exception: pass
 
 st.markdown("#### 🔍 Painel de Filtros Globais")
 
-# ♻️ Correção do botão: Aciona diretamente sem a variável corrompida st.columns()
+# Botão Limpar Filtros estruturado de forma direta e segura
 if st.button("♻️ Limpar Filtros", use_container_width=True):
     for k in ["b_rm", "f_req", "f_comp", "f_st_rm", "f_st_pc", "f_per", "b_pc"]:
         if k in st.session_state: st.session_state[k] = [] if k == "f_per" else "" if "b_" in k else "Todos"
@@ -66,7 +66,7 @@ if not tem_filtro_ativo:
 with st.spinner("Processando árvore de suprimentos..."):
     df_rm, df_pc, df_vinculo = executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filtro_comp, filtro_status_rm, filtro_status_pc)
 
-# Trava Antichunkedária: Valida na raiz se as tabelas brutas retornaram vazias
+# Trava Antichunkedária estruturada na raiz externa
 if df_rm.empty and df_pc.empty:
     st.warning("⚠️ Nenhum registro correspondente aos critérios foi localizado no banco de dados.")
     st.stop()
