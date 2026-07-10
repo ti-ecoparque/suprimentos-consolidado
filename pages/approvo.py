@@ -320,11 +320,9 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         df_final = df_final.drop_duplicates(subset=["rm_mat_seq_key"]).copy()
 
 
-        # ==========================================================
+                # ==========================================================
         # 🚨 7.5 PROCESSAMENTO SEGURO DE DATAS E CÁLCULO DE ATRASO
         # ==========================================================
-        # 🔥 ANTECIPAÇÃO DA TRAVA (FIX ABSOLUTO): Se a busca no banco veio vazia (como no PC 3003),
-        # para a execução imediatamente AQUI, desligando o carregando eterno e o erro do PyArrow!
         if df_final.empty:
             st.warning("⚠️ Nenhum registro correspondente aos critérios selecionados foi localizado no banco de dados.")
             st.stop()
@@ -335,11 +333,12 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         lista_dt_emissao_puro = []
         indices_para_manter = []
 
-        # 🚨 CORREÇÃO DO INTERVALO: Captura a primeira [0] e a segunda [1] data informadas na tela
+        # Só ativa o filtro de calendário se o usuário NÃO digitou uma RM ou PC direto na caixa
+        ignorar_calendario = (buscar_rm and str(buscar_rm).strip() != "") or (buscar_pc and str(buscar_pc).strip() != "")
+
         data_inicio_filtro = filtro_periodo[0] if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2 else None
         data_fim_filtro = filtro_periodo[1] if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2 else None
-        
-        # O laço agora só roda com total segurança se a tabela possuir registros válidos
+
         for idx in df_final.index:
             val_entrega = df_final.loc[idx, "entrega"]
             val_necessidade = df_final.loc[idx, "data_necessidade"]
@@ -349,33 +348,26 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                 if pd.isna(valor) or str(valor).strip() in ["", "---", "nan", "None", "NaT"]: 
                     return None
                 try:
-                    if hasattr(valor, "date"): 
-                        return valor.date()
-                    
-                    # Limpa a string pegando apenas os primeiros 10 caracteres (Ignora horas e milissegundos)
+                    if hasattr(valor, "date"): return valor.date()
                     t_str = str(valor).strip().split(" ")[0].split("T")[0]
-                    
-                    # Faz o parse seguro baseado no separador textual
-                    if "-" in t_str: 
-                        return datetime.datetime.strptime(t_str, "%Y-%m-%d").date()
-                    elif "/" in t_str: 
-                        return datetime.datetime.strptime(t_str, "%d/%m/%Y").date()
-                except Exception: 
-                    pass
+                    if "-" in t_str: return datetime.datetime.strptime(t_str, "%Y-%m-%d").date()
+                    elif "/" in t_str: return datetime.datetime.strptime(t_str, "%d/%m/%Y").date()
+                except Exception: pass
                 return None
 
             dt_ent = converter_para_data_nativa(val_entrega)
             dt_nec = converter_para_data_nativa(val_necessidade)
             dt_emi = converter_para_data_nativa(val_emissao)
 
-            if data_inicio_filtro and data_fim_filtro:
-                if dt_emi is None or not (data_inicio_filtro <= dt_emi <= data_fim_filtro):
-                    continue
+            # 🌟 BLINDAGEM MÁXIMA: Se buscou por RM ou PC, ignora o corte do calendário!
+            if not ignorar_calendario:
+                if data_inicio_filtro and data_fim_filtro:
+                    if dt_emi is None or not (data_inicio_filtro <= dt_emi <= data_fim_filtro): 
+                        continue
 
             indices_para_manter.append(idx)
             lista_entrega_dt_bruta.append(dt_ent)
             lista_necessidade_dt_bruta.append(dt_nec)
-            lista_dt_emissao_puro.append(dt_emi)
 
             if dt_ent is None or dt_nec is None:
                 lista_alertas_data.append("Data não informada")
@@ -384,11 +376,6 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                 if diferenca > 0: lista_alertas_data.append(f"Atraso de {diferenca} dias")
                 elif diferenca < 0: lista_alertas_data.append(f"Adiantado {abs(diferenca)} dias")
                 else: lista_alertas_data.append("No prazo")
-
-        # 🚨 TRAVA COMPLEMENTAR DE FILTRO: Se após aplicar a data do calendário a tabela esvaziar
-        if not indices_para_manter:
-            st.warning("⚠️ Nenhum registro localizado para o intervalo de período filtrado.")
-            st.stop()
 
         df_final = df_final.loc[indices_para_manter].copy()
         df_final["alerta_data"] = lista_alertas_data
