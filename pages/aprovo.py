@@ -40,10 +40,12 @@ try:
 except Exception: pass
 
 st.markdown("#### 🔍 Painel de Filtros Globais")
-col_btn_clear = st.columns()
-if col_btn_clear.button("♻️ Limpar Filtros", use_container_width=True):
+
+# 🔥 CORREÇÃO DO BOTÃO: Remove o st.columns() que causava a falha de leitura do arquivo
+if st.button("♻️ Limpar Filtros", use_container_width=True):
     for k in ["b_rm", "f_req", "f_comp", "f_st_rm", "f_st_pc", "f_per", "b_pc"]:
-        if k in st.session_state: st.session_state[k] = [] if k == "f_per" else "" if "b_" in k else "Todos"
+        if k in st.session_state: 
+            st.session_state[k] = [] if k == "f_per" else "" if "b_" in k else "Todos"
     st.rerun()
 
 col_f1, col_f2, col_f3 = st.columns(3)
