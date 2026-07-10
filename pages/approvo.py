@@ -189,6 +189,10 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
 
         if df_rm_bruto.empty and buscar_rm:
             df_rm_bruto = pd.DataFrame([{"rm": int(buscar_rm)}])
+            
+        if df_pc_bruto.empty and df_rm_bruto.empty:
+            st.warning("⚠️ O pedido de compra ou registro selecionado não foi localizado no banco de dados.")
+            st.stop()    
 
         # 🚨 ESTRUTURA DE PRESERVAÇÃO DE CHAVES INTACTA:
         cols_exclusivas_rm = ["nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "rm_str", "mat_str", "seq_item"]
