@@ -202,8 +202,10 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         cols_exclusivas_rm = ["nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "rm_str", "mat_str", "seq_item"]
         cols_exclusivas_pc = ["pedido", "mat", "nome_solicitante", "entrega", "quantidade", "status_documento", "data_ocorrencia", "nome_aprovador", "pedido_str", "mat_str"]
 
-        if df_rm_bruto.empty: df_rm_bruto = pd.DataFrame(columns=cols_exclusivas_rm)
-        if df_pc_bruto.empty: df_pc_bruto = pd.DataFrame(columns=cols_exclusivas_pc)
+        if df_rm_bruto.empty: 
+            df_rm_bruto = pd.DataFrame(columns=cols_exclusivas_rm, dtype=str)
+        if df_pc_bruto.empty: 
+            df_pc_bruto = pd.DataFrame(columns=cols_exclusivas_pc, dtype=str)
         
         # ==========================================================
         # 🔄 7. LOGÍSTICA DE UNIFICAÇÃO (FILTRO RIGIDO DE CHAVES)
