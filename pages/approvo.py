@@ -445,13 +445,16 @@ for c in ordem_colunas_exibicao:
     if c in df_final.columns:
         col_data = df_final[c]
         if isinstance(col_data, pd.DataFrame):
-            series_exibicao[c] = col_data.iloc[:, 0].fillna("---").astype(str)
+            # 🚨 FIX DEFINITIVO: Forçamos o dtype para 'object' (Texto)
+            series_exibicao[c] = col_data.iloc[:, 0].fillna("---").astype(object)
         else:
-            series_exibicao[c] = col_data.fillna("---").astype(str)
+            # 🚨 FIX DEFINITIVO: Forçamos o dtype para 'object' (Texto)
+            series_exibicao[c] = col_data.fillna("---").astype(object)
     else:
-        series_exibicao[c] = pd.Series("---", index=df_final.index, dtype=str)
+        # Se a coluna sumir do banco, cria ela em branco com tipo de texto puro garantido
+        series_exibicao[c] = pd.Series("---", index=df_final.index, dtype=object)
 
-# 🔥 CONSTRUÇÃO DO PAINEL DIRETO POR DICIONÁRIO DE TUPLAS
+# 🔥 A montagem do painel agora receberá tipos definidos e não vai mais explodir o ChunkedArray!
 df_exibicao = pd.DataFrame({
     colunas_multi_index[c]: series_exibicao[c] for c in ordem_colunas_exibicao
 })
