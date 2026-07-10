@@ -36,15 +36,12 @@ def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_
         "sit_item": ("SITUAÇÃO DO ITEM", "Situação"), "alerta_data": ("ALERTA DE DATA", "Alerta de Entrega")
     }
 
-    # 1. Cria a base estável para visualização no Streamlit (Mantém o MultiIndex na tela)
     df_exibicao = df_final[ordem_colunas_exibicao].copy()
     df_exibicao.columns = pd.MultiIndex.from_tuples([colunas_multi_index[c] for c in ordem_colunas_exibicao])
 
-    # 2. Cria uma cópia limpa e achata o cabeçalho exclusivamente para salvar no Excel (.xlsx)
     df_excel = df_final[ordem_colunas_exibicao].copy()
-    df_excel.columns = [f"{colunas_multi_index[c][0]} - {colunas_multi_index[c][1]}" for c in ordem_colunas_exibicao]
+    df_excel.columns = [f"{colunas_multi_index[c]} - {colunas_multi_index[c]}" for c in ordem_colunas_exibicao]
 
-    # 📥 GERAÇÃO CONSOLIDADA EM BYTES IMUNE A ERROS
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
         df_excel.to_excel(writer, index=False, sheet_name='Approvo Status')
@@ -62,20 +59,40 @@ def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_
     def aplicar_cores_corpo(df):
         estilos = pd.DataFrame('', index=df.index, columns=df.columns)
         mapa_indices = {orig_idx: pos for pos, orig_idx in enumerate(df_final.index) if orig_idx in df.index}
+        
         for col in df.columns:
-            grupo = col
+            # Captura a tupla do MultiIndex para saber a qual bloco de cabeçalho a coluna pertence
+            grupo = col[0]
+            sub_coluna = col[1]
+            
             for i in df.index:
                 pos_lista = mapa_indices.get(i)
-                tem_atraso = lista_entrega_dt_bruta[pos_lista] is not None and lista_necessidade_dt_bruta[pos_lista] is not None and (lista_entrega_dt_bruta[pos_lista] > lista_necessidade_dt_bruta[pos_lista]) if pos_lista is not None else False
-                if tem_atraso: estilos.at[i, col] = 'background-color: #fce4d6; color: #000000;'
+                
+                # 🚨 CÁLCULO CIRÚRGICO DE PRAZOS: Identifica o estado logístico da linha
+                esta_atrasado = False
+                esta_adiantado = False
+                if pos_lista is not None and lista_entrega_dt_bruta[pos_lista] is not None and lista_necessidade_dt_bruta[pos_lista] is not None:
+                    dias_diff = (lista_entrega_dt_bruta[pos_lista] - lista_necessidade_dt_bruta[pos_lista]).days
+                    if dias_diff > 0: esta_atrasado = True
+                    elif dias_diff < 0: esta_adiantado = True
+
+                # 🌟 NOVA REGRA CORES: Se for a coluna de alerta, aplica a cor condicional específica de prazos
+                if sub_coluna == "Alerta de Entrega":
+                    if esta_atrasado:
+                        estilos.at[i, col] = 'background-color: #fce4d6; color: #c65911; font-weight: bold; text-align: center;'
+                    elif esta_adiantado:
+                        estilos.at[i, col] = 'background-color: #e6f2ff; color: #1f4e78; font-weight: bold; text-align: center;'
+                    else:
+                        estilos.at[i, col] = 'background-color: #e2f0d9; color: #375623; text-align: center;'
+                
+                # Se for qualquer outra coluna normal do painel, mantém a cor pastel de bloco corporativo estável
                 else:
                     if grupo == "REQUISICAO DE MATERIAL MEGA": estilos.at[i, col] = 'background-color: #f2f7f2; color: #000000;'
                     elif grupo == "APPROVAL (RM)": estilos.at[i, col] = 'background-color: #e2f0d9; color: #000000;'
                     elif grupo == "PEDIDO DE COMPRA MEGA": estilos.at[i, col] = 'background-color: #fbf2fa; color: #000000;'
                     elif grupo == "APPROVAL (PC)": estilos.at[i, col] = 'background-color: #f3daf1; color: #000000;'
-                if not tem_atraso:
-                    if grupo == "SITUAÇÃO DO ITEM": estilos.at[i, col] = 'background-color: #a9d08e; color: #000000; font-weight: bold; text-align: center;'
-                    elif grupo == "ALERTA DE DATA": estilos.at[i, col] = 'background-color: #fff2cc; color: #000000; text-align: center;'
+                    elif grupo == "SITUAÇÃO DO ITEM": estilos.at[i, col] = 'background-color: #e2efda; color: #375623; font-weight: bold; text-align: center;'
+                    else: estilos.at[i, col] = 'background-color: #ffffff; color: #000000;'
         return estilos
 
     st.markdown("""
@@ -87,7 +104,7 @@ def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_
             th.col_heading.level0.id14_16 { background-color: #df9ff2 !important; }
             th.col_heading.level0.id17 { background-color: #a9d08e !important; color: #000000 !important; }
             th.col_heading.level0.id18 { background-color: #ffe599 !important; }
-            th.col_heading.level1 { text-align: center !important; }
+            th.col_heading.level1 { text-align: center !important; font-weight: normal !important; }
         </style>
     """, unsafe_allow_html=True)
 
