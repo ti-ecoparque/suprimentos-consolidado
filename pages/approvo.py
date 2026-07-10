@@ -127,13 +127,13 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             
             lista_rms_pontes = [int(float(x)) for x in df_vinculo["rm"].unique() if pd.notna(x)] if "rm" in df_vinculo.columns else []
             
-            query_rm = supabase.table("vw_approvo_rm").select("*")
+            # 🚨 FIX DO NONE: Se não achou RMs pontes na tabela de vínculo, cria DataFrame vazio sem estourar erro
             if lista_rms_pontes:
-                query_rm = query_rm.in_("rm", lista_rms_pontes)
+                query_rm = supabase.table("vw_approvo_rm").select("*").in_("rm", lista_rms_pontes)
+                res_rm = query_rm.execute()
+                df_rm_bruto = pd.DataFrame(res_rm.data)
             else:
-                query_rm = query_rm.none()
-            res_rm = query_rm.execute()
-            df_rm_bruto = pd.DataFrame(res_rm.data)
+                df_rm_bruto = pd.DataFrame()
             
         else:
             # 📐 PASSO B: Fluxo Normal de buscas por RM ou filtros combinados
@@ -190,13 +190,12 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         if df_rm_bruto.empty and buscar_rm:
             df_rm_bruto = pd.DataFrame([{"rm": int(buscar_rm)}])
 
-        # 🚨 ESTRUTURA CRÍTICA DE PRESERVAÇÃO DE CHAVES INTACTA:
+        # 🚨 ESTRUTURA DE PRESERVAÇÃO DE CHAVES INTACTA:
         cols_exclusivas_rm = ["nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "rm_str", "mat_str", "seq_item"]
         cols_exclusivas_pc = ["pedido", "mat", "nome_solicitante", "entrega", "quantidade", "status_documento", "data_ocorrencia", "nome_aprovador", "pedido_str", "mat_str"]
 
         if df_rm_bruto.empty: df_rm_bruto = pd.DataFrame(columns=cols_exclusivas_rm)
         if df_pc_bruto.empty: df_pc_bruto = pd.DataFrame(columns=cols_exclusivas_pc)
-
         # ==========================================================
         # 🔄 7. LOGÍSTICA DE UNIFICAÇÃO (FILTRO RIGIDO DE CHAVES)
         # ==========================================================
