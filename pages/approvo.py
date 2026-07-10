@@ -129,8 +129,11 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         if buscar_rm and str(buscar_rm).strip() != "":
             rm_alvo = str(buscar_rm).strip()
             
-            # 1. Busca direta na visão de RMs do Supabase
-            res_rm = supabase.table("vw_approvo_rm").select("*").eq("rm", rm_alvo).limit(500).execute()
+            # 🚨 FIX DEFINITIVO DE TIPAGEM: Se o alvo for número puro, envia como int, senão envia como string
+            rm_parametro = int(rm_alvo) if rm_alvo.isdigit() else rm_alvo
+            
+            # 1. Busca direta na visão de RMs do Supabase com o parâmetro de tipo corrigido
+            res_rm = supabase.table("vw_approvo_rm").select("*").eq("rm", rm_parametro).limit(500).execute()
             df_rm_bruto = pd.DataFrame(res_rm.data)
             
             # 2. Busca direta na tabela de amarrações para ver se existe algum pedido
