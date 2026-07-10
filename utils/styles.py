@@ -63,10 +63,12 @@ def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_
         estilos = pd.DataFrame('', index=df.index, columns=df.columns)
         mapa_indices = {orig_idx: pos for pos, orig_idx in enumerate(df_final.index) if orig_idx in df.index}
         
+        # Cria uma lista limpa com os nomes originais mapeados para bater a posição exata
+        lista_colunas_mapeadas = list(df.columns)
+
         for col in df.columns:
-            # 🌟 CORREÇÃO DO MULTIINDEX: Puxa explicitamente o nível 0 e o nível 1 da tupla
-            grupo = col[0] if isinstance(col, tuple) else str(col)
-            sub_coluna = col[1] if isinstance(col, tuple) else str(col)
+            # 🔥 ENGENHARIA REVERSA DE ÍNDICES: Descobre matematicamente a posição da coluna de 0 a 18
+            idx_coluna = lista_colunas_mapeadas.index(col)
             
             for i in df.index:
                 pos_lista = mapa_indices.get(i)
@@ -79,8 +81,8 @@ def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_
                     if dias_diff > 0: esta_atrasado = True
                     elif dias_diff < 0: esta_adiantado = True
 
-                # Regra 1: Coluna isolada de Alerta de Entrega
-                if sub_coluna == "Alerta de Entrega" or grupo == "ALERTA DE DATA":
+                # 🌟 REGRA 1: Posição 18 é a coluna final de Alerta de Entrega
+                if idx_coluna == 18:
                     if "DATA NÃO INFORMADA" in texto_celula.upper():
                         estilos.at[i, col] = 'background-color: #fff2cc; color: #7f6000; text-align: center;'
                     elif esta_atrasado:
@@ -90,14 +92,20 @@ def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_
                     else:
                         estilos.at[i, col] = 'background-color: #e2f0d9; color: #375623; text-align: center;'
                 
-                # Regra 2: Restante das colunas normais com mapeamento por blocos pastéis limpos
+                # 🌟 REGRA 2: Mapeamento matemático por blocos pastéis limpos baseados na posição
                 else:
-                    if grupo == "REQUISICAO DE MATERIAL MEGA": estilos.at[i, col] = 'background-color: #f2f7f2; color: #000000;'
-                    elif grupo == "APPROVAL (RM)": estilos.at[i, col] = 'background-color: #e2f0d9; color: #000000;'
-                    elif grupo == "PEDIDO DE COMPRA MEGA": estilos.at[i, col] = 'background-color: #fbf2fa; color: #000000;'
-                    elif grupo == "APPROVAL (PC)": estilos.at[i, col] = 'background-color: #f3daf1; color: #000000;'
-                    elif grupo == "SITUAÇÃO DO ITEM": estilos.at[i, col] = 'background-color: #e2efda; color: #375623; font-weight: bold; text-align: center;'
-                    else: estilos.at[i, col] = 'background-color: #ffffff; color: #000000;'
+                    if 0 <= idx_coluna <= 6:     # REQUISICAO DE MATERIAL MEGA (0 a 6)
+                        estilos.at[i, col] = 'background-color: #f2f7f2; color: #000000;'
+                    elif 7 <= idx_coluna <= 9:   # APPROVAL (RM) (7 a 9)
+                        estilos.at[i, col] = 'background-color: #e2f0d9; color: #000000;'
+                    elif 10 <= idx_coluna <= 13: # PEDIDO DE COMPRA MEGA (10 a 13)
+                        estilos.at[i, col] = 'background-color: #fbf2fa; color: #000000;'
+                    elif 14 <= idx_coluna <= 16: # APPROVAL (PC) (14 a 16)
+                        estilos.at[i, col] = 'background-color: #f3daf1; color: #000000;'
+                    elif idx_coluna == 17:       # SITUAÇÃO DO ITEM (17)
+                        estilos.at[i, col] = 'background-color: #e2efda; color: #375623; font-weight: bold; text-align: center;'
+                    else:
+                        estilos.at[i, col] = 'background-color: #ffffff; color: #000000;'
         return estilos
 
     st.markdown("""
