@@ -312,9 +312,10 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         lista_dt_emissao_puro = []
         indices_para_manter = []
 
-        data_inicio_filtro = filtro_periodo if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2 else None
-        data_fim_filtro = filtro_periodo if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2 else None
-
+        # 🚨 CORREÇÃO DO INTERVALO: Captura a primeira [0] e a segunda [1] data informadas na tela
+        data_inicio_filtro = filtro_periodo[0] if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2 else None
+        data_fim_filtro = filtro_periodo[1] if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2 else None
+        
         # O laço agora só roda com total segurança se a tabela possuir registros válidos
         for idx in df_final.index:
             val_entrega = df_final.loc[idx, "entrega"]
