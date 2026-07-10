@@ -296,11 +296,22 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         # ==========================================================
         # 🚨 7.5 PROCESSAMENTO SEGURO DE DATAS E CÁLCULO DE ATRASO
         # ==========================================================
-        lista_alertas_data = []
-        lista_dt_emissao_puro = []
-        data_inicio_filtro = filtro_periodo[0] if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2 else None
-        data_fim_filtro = filtro_periodo[1] if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2 else None
+        # 🔥 ANTECIPAÇÃO DA TRAVA (FIX ABSOLUTO): Se a busca no banco veio vazia (como no PC 3003),
+        # para a execução imediatamente AQUI, desligando o carregando eterno e o erro do PyArrow!
+        if df_final.empty:
+            st.warning("⚠️ Nenhum registro correspondente aos critérios selecionados foi localizado no banco de dados.")
+            st.stop()
 
+        lista_alertas_data = []
+        lista_entrega_dt_bruta = []
+        lista_necessidade_dt_bruta = []
+        lista_dt_emissao_puro = []
+        indices_para_manter = []
+
+        data_inicio_filtro = filtro_periodo if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2 else None
+        data_fim_filtro = filtro_periodo if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2 else None
+
+        # O laço agora só roda com total segurança se a tabela possuir registros válidos
         for idx in df_final.index:
             val_entrega = df_final.loc[idx, "entrega"]
             val_necessidade = df_final.loc[idx, "data_necessidade"]
@@ -311,8 +322,8 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                 try:
                     if hasattr(valor, "date"): return valor.date()
                     t_str = str(valor).strip().split(" ")
-                    if "-" in t_str[0]: return datetime.datetime.strptime(t_str[0], "%Y-%m-%d").date()
-                    elif "/" in t_str[0]: return datetime.datetime.strptime(t_str[0], "%d/%m/%Y").date()
+                    if "-" in t_str: return datetime.datetime.strptime(t_str, "%Y-%m-%d").date()
+                    elif "/" in t_str: return datetime.datetime.strptime(t_str, "%d/%m/%Y").date()
                 except Exception: pass
                 return None
 
@@ -337,13 +348,14 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                 elif diferenca < 0: lista_alertas_data.append(f"Adiantado {abs(diferenca)} dias")
                 else: lista_alertas_data.append("No prazo")
 
+        # 🚨 TRAVA COMPLEMENTAR DE FILTRO: Se após aplicar a data do calendário a tabela esvaziar
+        if not indices_para_manter:
+            st.warning("⚠️ Nenhum registro localizado para o intervalo de período filtrado.")
+            st.stop()
+
         df_final = df_final.loc[indices_para_manter].copy()
         df_final["alerta_data"] = lista_alertas_data
-
-        # 🌟 A TRAVA ENTRA AQUI (Com exatamente 8 espaços de recuo, alinhada com o df_final de cima):
-        if df_final.empty:
-            st.warning("⚠️ Nenhum registro corresponde aos critérios selecionados no período filtrado.")
-            st.stop()
+            
     except Exception as e:
         st.error(f"❌ Erro crítico ao consolidar as visões no Cenário D: {e}")
         st.stop()
