@@ -296,15 +296,24 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         df_final["rm"] = s_final_rm.fillna(df_final["rm_str"]).astype(str)
         df_final["mat"] = s_final_mat.fillna(df_final["mat_str"]).astype(str)
 
-        if buscar_rm:
+        if buscar_rm and str(buscar_rm).strip() != "":
             df_final = df_final[df_final["rm_str"].astype(str).str.strip() == str(buscar_rm).strip()]
+            
         if filtro_req != "Todos":
             df_final = df_final[df_final["nome_solicitante"].astype(str).str.strip() == str(filtro_req).strip()]
+            
         if filtro_comp != "Todos":
             df_final = df_final[df_final["comprador"].astype(str).str.strip() == str(filtro_comp).strip()]
+            
+        # 🌟 VÍNCULO SEGURO: O filtro de PC só apaga linhas se houver um texto válido digitado na caixa!
+        if buscar_pc and str(buscar_pc).strip() not in ["", "---", "nan", "None"]:
+            df_final = df_final[df_final["pedido_str"].astype(str).str.strip() == str(buscar_pc).strip()]
+            
         if filtro_status_pc != "Todos":
             mapa_invertido = {"Aprovado": "A", "Em Aprovação": "E", "Reprovado": "R"}
             df_final = df_final[df_final["status_pc"].astype(str).str.strip().str.upper() == mapa_invertido[filtro_status_pc].upper()]
+            
+            
         # O filtro de memória do PC só deve agir se o usuário realmente digitou algo no campo!
         if buscar_pc and str(buscar_pc).strip() != "":
             df_final = df_final[df_final["pedido_str"].astype(str).str.strip() == str(buscar_pc).strip()]
