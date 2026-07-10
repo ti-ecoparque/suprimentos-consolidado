@@ -323,9 +323,7 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                 # ==========================================================
         # 🚨 7.5 PROCESSAMENTO SEGURO DE DATAS E CÁLCULO DE ATRASO
         # ==========================================================
-        if df_final.empty:
-            st.warning("⚠️ Nenhum registro correspondente aos critérios selecionados foi localizado no banco de dados.")
-            st.stop()
+        
 
         lista_alertas_data = []
         lista_entrega_dt_bruta = []
@@ -386,9 +384,9 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
 # ==========================================================
 # 🚨 TRAVAS DE SEGURANÇA E MULTIINDEX GLOBAIS (MARGEM ZERO)
 # ==========================================================
-#if df_final.empty:
-#    st.warning("⚠️ Nenhum registro corresponde aos critérios selecionados no período filtrado.")
-#    st.stop()
+if df_final.empty:
+    st.warning("⚠️ Nenhum registro corresponde aos critérios selecionados no período filtrado.")
+    st.stop()
 
 # ==========================================================
 # 📊 8. MAPEAMENTO, TRADUÇÃO E PROCESSAMENTO COMPLETO DE STRINGS
