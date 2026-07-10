@@ -360,7 +360,13 @@ for col in ["data_ocorrencia", "data_ocorrencia_pc"]:
 df_final["nome_solicitante"] = df_final["nome_solicitante"].fillna("RM Sem Fluxo Approvo").astype(str)
 df_final["desc_item"] = df_final["desc_item"].fillna("Direto p/ Compras").astype(str)
 
+        # 🌟 FIX MATEMÁTICO: Se a coluna 'mat' original falhar ou vier com traço,
+        # puxa o código numérico real guardado na nossa chave de texto 'mat_str'
+df_final["mat"] = df_final["mat"].replace("---", None).fillna(df_final["mat_str"]).astype(str)
+
+        # Tratamento final de nulos genéricos de texto
 df_final.fillna("---", inplace=True)
+
 df_final.replace("nan", "---", inplace=True)
 df_final.replace("None", "---", inplace=True)
 
