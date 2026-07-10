@@ -279,6 +279,12 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         # 🔥 FIM DO KEYERROR E DO DATAFRAME ERROR: O outer join opera sobre colunas 100% limpas e mapeadas
         df_final = pd.merge(df_rm_consolidada, df_pc_limpo, on=["pedido_str", "mat_str"], how="outer")
 
+         # Ajusta os nomes das colunas de pedidos para manter a compatibilidade com o resto do script
+        if "pedido_str_y" in df_final.columns:
+            df_final["pedido_str"] = df_final["pedido_str_y"].fillna(df_final.get("pedido_str_x", "---"))
+        elif "pedido_str_x" in df_final.columns:
+            df_final["pedido_str"] = df_final["pedido_str_x"]
+
         # Lista padrão final para sanear nulos corporativos
         todas_colunas_vitais = ["nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "rm_str", "mat_str", "pedido_str", "comprador", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"]
         for col in todas_colunas_vitais:
