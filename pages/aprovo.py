@@ -2,7 +2,7 @@ import streamlit as st
 import os
 from supabase import create_client
 
-# Importação limpa habilitada pelo arquivo __init__.py
+# Importação dos módulos customizados
 from utils.queries import executar_consultas_supabase
 from utils.processing import processar_e_unificar_dados
 from utils.styles import renderizar_grid_multiindex_colorido
@@ -36,6 +36,7 @@ except Exception: pass
 
 st.markdown("#### 🔍 Painel de Filtros Globais")
 
+# ♻️ Correção do botão: Aciona diretamente sem a variável corrompida st.columns()
 if st.button("♻️ Limpar Filtros", use_container_width=True):
     for k in ["b_rm", "f_req", "f_comp", "f_st_rm", "f_st_pc", "f_per", "b_pc"]:
         if k in st.session_state: st.session_state[k] = [] if k == "f_per" else "" if "b_" in k else "Todos"
@@ -51,6 +52,11 @@ with col_f4: filtro_status_rm = st.selectbox("Status da RM:", ["Todos", "Aprovad
 with col_f5: filtro_status_pc = st.selectbox("Status do PC:", ["Todos", "Aprovado", "Em Aprovação", "Reprovado"], key="f_st_pc")
 with col_f6: filtro_periodo = st.date_input("Intervalo (Data da Requisição):", value=[], format="DD/MM/YYYY", key="f_per")
 buscar_pc = st.text_input("Filtrar por Número do Pedido de Compra (Nr. PC):", key="b_pc").strip()
+
+if not filtro_req: filtro_req = "Todos"
+if not filtro_comp: filtro_comp = "Todos"
+if not filtro_status_rm: filtro_status_rm = "Todos"
+if not filtro_status_pc: filtro_status_pc = "Todos"
 
 tem_filtro_ativo = buscar_rm or buscar_pc or filtro_req != "Todos" or filtro_comp != "Todos" or filtro_status_rm != "Todos" or filtro_status_pc != "Todos" or (isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2)
 if not tem_filtro_ativo:
