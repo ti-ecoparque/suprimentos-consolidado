@@ -2,7 +2,7 @@ import streamlit as st
 import os
 from supabase import create_client
 
-# Importações limpas dos submódulos utilitários da pasta utils
+# Importação dos sub-módulos utilitários da pasta utils
 from utils.queries import executar_consultas_supabase
 from utils.processing import processar_e_unificar_dados
 from utils.styles import renderizar_grid_multiindex_colorido
@@ -36,23 +36,45 @@ except Exception: pass
 
 st.markdown("#### 🔍 Painel de Filtros Globais")
 
-# ♻️ FIX DO BOTÃO: Limpa as variáveis da sessão de re-runs de forma nativa e segura
-if st.button("♻️ Limpar Filtros", use_container_width=True):
-    for k in ["b_rm", "f_req", "f_comp", "f_st_rm", "f_st_pc", "f_per", "b_pc"]:
-        if k in st.session_state: st.session_state[k] = [] if k == "f_per" else "" if "b_" in k else "Todos"
-    st.rerun()
-
+# ==========================================================
+# 🧱 FILTROS REORGANIZADOS (GRID DE 3 COLUNAS)
+# ==========================================================
 col_f1, col_f2, col_f3 = st.columns(3)
 col_f4, col_f5, col_f6 = st.columns(3)
 
-with col_f1: buscar_rm = st.text_input("Filtrar por Número da RM:", key="b_rm").strip()
-with col_f2: filtro_req = st.selectbox("Filtrar por Nome do Requisitante:", opcoes_requisitas, key="f_req")
-with col_f3: filtro_comp = st.selectbox("Filtrar por Nome do Comprador:", opcoes_compradores, key="f_comp")
-with col_f4: filtro_status_rm = st.selectbox("Status da RM:", ["Todos", "Aprovado", "Em Aprovação", "Reprovado"], key="f_st_rm")
-with col_f5: filtro_status_pc = st.selectbox("Status do PC:", ["Todos", "Aprovado", "Em Aprovação", "Reprovado"], key="f_st_pc")
-with col_f6: filtro_periodo = st.date_input("Intervalo (Data da Requisição):", value=[], format="DD/MM/YYYY", key="f_per")
-buscar_pc = st.text_input("Filtrar por Número do Pedido de Compra (Nr. PC):", key="b_pc").strip()
+# Linha 1 de Filtros
+with col_f1: 
+    filtro_req = st.selectbox("Filtrar por Nome do Requisitante:", opcoes_requisitas, key="f_req")
+with col_f2: 
+    buscar_rm = st.text_input("Filtrar por Número da RM:", key="b_rm").strip()
+with col_f3: 
+    filtro_comp = st.selectbox("Filtrar por Nome do Comprador:", opcoes_compradores, key="f_comp")
 
+# Linha 2 de Filtros
+with col_f4: 
+    filtro_periodo = st.date_input("Intervalo (Data da Requisição):", value=[], format="DD/MM/YYYY", key="f_per")
+with col_f5: 
+    buscar_pc = st.text_input("Filtrar por Número do Pedido de Compra (Nr. PC):", key="b_pc").strip()
+with col_f6: 
+    filtro_status_rm = st.selectbox("Status da RM:", ["Todos", "Aprovado", "Em Aprovação", "Reprovado"], key="f_st_rm")
+
+# Filtro avulso que sobrou da reorganização (posicionado de forma discreta)
+filtro_status_pc = st.selectbox("Status do PC:", ["Todos", "Aprovado", "Em Aprovação", "Reprovado"], key="f_st_pc")
+
+st.write("") # Pequeno espaçador visual
+
+# ==========================================================
+# 📥 BARRA DE BOTÕES EXECUTIVOS LADO A LADO
+# ==========================================================
+col_btn_limpar, col_btn_exportar = st.columns(2)
+
+with col_btn_limpar:
+    if st.button("♻️ Limpar Filtros", use_container_width=True):
+        for k in ["b_rm", "f_req", "f_comp", "f_st_rm", "f_st_pc", "f_per", "b_pc"]:
+            if k in st.session_state: st.session_state[k] = [] if k == "f_per" else "" if "b_" in k else "Todos"
+        st.rerun()
+
+# 🚨 HIGIENIZAÇÃO DE VARIÁVEIS ANTES DA CONSULTA
 if not filtro_req: filtro_req = "Todos"
 if not filtro_comp: filtro_comp = "Todos"
 if not filtro_status_rm: filtro_status_rm = "Todos"
@@ -77,4 +99,7 @@ if df_final.empty:
     st.warning("⚠️ Nenhum registro localizado para o período filtrado.")
     st.stop()
 
-renderizar_grid_multiindex_colorido(df_final, lista_ent, lista_nec)
+# O botão de exportar será renderizado por dentro do módulo de estilos, 
+# se posicionando automaticamente na col_btn_exportar ao lado do Limpar!
+with col_btn_exportar:
+    renderizar_grid_multiindex_colorido(df_final, lista_ent, lista_nec)
