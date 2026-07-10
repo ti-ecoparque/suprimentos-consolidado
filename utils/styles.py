@@ -3,7 +3,7 @@ import streamlit as st
 import datetime
 import io
 
-def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_necessidade_dt_bruta):
+def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_necessidade_dt_bruta, container_botao):
     if "status_documento" in df_final.columns:
         df_final["status_documento"] = df_final["status_documento"].map(lambda x: {"A":"Aprovado","E":"Em Aprovação","R":"Reprovado"}.get(str(x).strip().upper(), "---") if pd.notna(x) else "---")
     if "status_pc" in df_final.columns:
@@ -27,7 +27,6 @@ def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_
     for col in ["data_ocorrencia", "data_ocorrencia_pc"]:
         if col in df_final.columns: df_final[col] = df_final[col].apply(lambda x: formatar_visual_seguro(x, incluir_hora=True))
 
-    # Resgate do número do material estável
     df_final["mat"] = df_final["mat"].replace("---", None).fillna(df_final["mat_str"]).astype(str).str.strip()
 
     ordem_colunas_exibicao = ["nome_solicitante", "rm", "mat", "desc_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "comprador", "pedido_str", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc", "sit_item", "alerta_data"]
@@ -50,24 +49,24 @@ def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_
         df_excel.to_excel(writer, index=False, sheet_name='Approvo Status')
     dados_excel = output.getvalue()
 
-    st.download_button(
-        label="📥 Exportar Painel para o Excel (.xlsx)",
-        data=dados_excel,
-        file_name=f"approvo_status_{datetime.date.today().strftime('%Y%m%d')}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True
-    )
-    st.divider()
+    # 🚨 O BOTÃO SE ENCAIXA NA COLUNA DA DIREITA LÁ DE CIMA PERFEITAMENTE
+    with container_botao:
+        st.download_button(
+            label="📥 Exportar Painel para o Excel (.xlsx)",
+            data=dados_excel,
+            file_name=f"approvo_status_{datetime.date.today().strftime('%Y%m%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+
+    st.write("") # Quebra de linha isolando a barra de botões da tabela
 
     def aplicar_cores_corpo(df):
         estilos = pd.DataFrame('', index=df.index, columns=df.columns)
         mapa_indices = {orig_idx: pos for pos, orig_idx in enumerate(df_final.index) if orig_idx in df.index}
-        
-        # Cria uma lista limpa com os nomes originais mapeados para bater a posição exata
         lista_colunas_mapeadas = list(df.columns)
 
         for col in df.columns:
-            # 🔥 ENGENHARIA REVERSA DE ÍNDICES: Descobre matematicamente a posição da coluna de 0 a 18
             idx_coluna = lista_colunas_mapeadas.index(col)
             
             for i in df.index:
@@ -81,28 +80,28 @@ def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_
                     if dias_diff > 0: esta_atrasado = True
                     elif dias_diff < 0: esta_adiantado = True
 
-                # 🌟 REGRA 1: Posição 18 é a coluna final de Alerta de Entrega
+                # Coluna 18: Alerta de Entrega
                 if idx_coluna == 18:
                     if "DATA NÃO INFORMADA" in texto_celula.upper():
-                        estilos.at[i, col] = 'background-color: #fff2cc; color: #7f6000; text-align: center;'
+                        estilos.at[i, col] = 'background-color: #fff2cc; color: #7f6000; text-align: center; font-weight: bold;'
                     elif esta_atrasado:
                         estilos.at[i, col] = 'background-color: #fce4d6; color: #c65911; font-weight: bold; text-align: center;'
                     elif esta_adiantado:
                         estilos.at[i, col] = 'background-color: #e6f2ff; color: #1f4e78; font-weight: bold; text-align: center;'
                     else:
-                        estilos.at[i, col] = 'background-color: #e2f0d9; color: #375623; text-align: center;'
+                        estilos.at[i, col] = 'background-color: #e2f0d9; color: #375623; text-align: center; font-weight: bold;'
                 
-                # 🌟 REGRA 2: Mapeamento matemático por blocos pastéis limpos baseados na posição
+                # Mapeamento estrito por posições numéricas
                 else:
-                    if 0 <= idx_coluna <= 6:     # REQUISICAO DE MATERIAL MEGA (0 a 6)
+                    if 0 <= idx_coluna <= 6:
                         estilos.at[i, col] = 'background-color: #f2f7f2; color: #000000;'
-                    elif 7 <= idx_coluna <= 9:   # APPROVAL (RM) (7 a 9)
+                    elif 7 <= idx_coluna <= 9:
                         estilos.at[i, col] = 'background-color: #e2f0d9; color: #000000;'
-                    elif 10 <= idx_coluna <= 13: # PEDIDO DE COMPRA MEGA (10 a 13)
+                    elif 10 <= idx_coluna <= 13:
                         estilos.at[i, col] = 'background-color: #fbf2fa; color: #000000;'
-                    elif 14 <= idx_coluna <= 16: # APPROVAL (PC) (14 a 16)
+                    elif 14 <= idx_coluna <= 16:
                         estilos.at[i, col] = 'background-color: #f3daf1; color: #000000;'
-                    elif idx_coluna == 17:       # SITUAÇÃO DO ITEM (17)
+                    elif idx_coluna == 17:
                         estilos.at[i, col] = 'background-color: #e2efda; color: #375623; font-weight: bold; text-align: center;'
                     else:
                         estilos.at[i, col] = 'background-color: #ffffff; color: #000000;'
@@ -122,4 +121,5 @@ def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_
     """, unsafe_allow_html=True)
 
     df_estilizado = df_exibicao.style.apply(aplicar_cores_corpo, axis=None)
+    # 🔥 LARGURA TOTAL: Força o componente a renderizar em 100% da tela abaixo dos botões
     st.dataframe(df_estilizado, use_container_width=True, hide_index=True)
