@@ -149,7 +149,7 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             # 📐 PASSO B: Fluxo Normal de buscas por RM ou filtros combinados
             query_rm = supabase.table("vw_approvo_rm").select("*")
             if buscar_rm: 
-                query_rm = query_rm.eq("rm", str(buscar_rm))
+                query_rm = query_rm.eq("rm", str(buscar_rm).strip())
             if filtro_req != "Todos": 
                 query_rm = query_rm.eq("nome_solicitante", filtro_req)
             if filtro_status_rm != "Todos":
@@ -164,9 +164,11 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
                 s_rm_b = df_rm_bruto["rm"].iloc[:, 0] if isinstance(df_rm_bruto["rm"], pd.DataFrame) else df_rm_bruto["rm"]
                 lista_rms_encontradas = [int(float(x)) for x in s_rm_b.unique() if pd.notna(x) and str(x).strip() not in ["", "---", "nan"]]
 
+            # 🚨 FIX CIRÚRGICO DA RM NUMÉRICA:
             query_vinculo = supabase.table("pedido_compra").select("rm", "pedido")
             if buscar_rm:
-                query_vinculo = query_vinculo.eq("rm", int(buscar_rm) if str(buscar_rm).isdigit() else 0)
+                v_rm = str(buscar_rm).strip()
+                query_vinculo = query_vinculo.eq("rm", int(v_rm) if v_rm.isdigit() else v_rm)
             elif lista_rms_encontradas:
                 query_vinculo = query_vinculo.in_("rm", lista_rms_encontradas)
                 
