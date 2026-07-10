@@ -161,7 +161,7 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             df_rm_bruto = pd.DataFrame([{"rm": int(buscar_rm)}])
 
         # 🚨 FIX CIRÚRGICO 1: Adicionamos as chaves '_str' diretamente nas listas de preservação rígida
-        cols_exclusivas_rm = ["nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "rm_str", "mat_str"]
+        cols_exclusivas_rm = ["nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "rm_str", "mat_str", "seq_item"]
         cols_exclusivas_pc = ["pedido", "mat", "nome_solicitante", "entrega", "quantidade", "status_documento", "data_ocorrencia", "nome_aprovador", "pedido_str", "mat_str"]
 
         if df_rm_bruto.empty: df_rm_bruto = pd.DataFrame(columns=cols_exclusivas_rm)
@@ -255,9 +255,13 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             mapa_invertido = {"Aprovado": "A", "Em Aprovação": "E", "Reprovado": "R"}
             df_final = df_final[df_final["status_pc"].astype(str).str.strip().str.upper() == mapa_invertido[filtro_status_pc].upper()]
 
-        df_final["rm_mat_key"] = df_final["rm"].astype(str) + "_" + df_final["mat"].astype(str)
-        df_final = df_final.drop_duplicates(subset=["rm_mat_key"]).copy()
+        # Se por flutuação o seq_item vier vazio em compras diretas, assume "---"
+        df_final["seq_item"] = df_final.get("seq_item", pd.Series(dtype=str, index=df_final.index)).fillna("---").astype(str)
 
+        # 🔥 A MÁGICA: A chave agora junta RM + Material + Sequencial (1 a 9). 
+        # Isso faz o Pandas entender que cada linha é única e lista as 9 linhas do parafuso!
+        df_final["rm_mat_seq_key"] = df_final["rm"].astype(str) + "_" + df_final["mat"].astype(str) + "_" + df_final["seq_item"]
+        df_final = df_final.drop_duplicates(subset=["rm_mat_seq_key"]).copy()
 
 
         # ==========================================================
