@@ -67,37 +67,47 @@ except Exception:
 # ==========================================================
 st.markdown("#### 🔍 Painel de Filtros Globais")
 
-# Cria uma linha para o botão de limpar filtros no topo direito do painel
 col_header_limpar, col_btn_limpar = st.columns([5, 1])
 with col_btn_limpar:
-    # O botão recarrega a página limpando as variáveis armazenadas na sessão de re-runs
+    # Lógica que zera fisicamente os valores da memória do Streamlit antes do re-run
     if st.button("♻️ Limpar Filtros", use_container_width=True):
+        chaves_para_limpar = ["b_rm", "f_req", "f_comp", "f_st_rm", "f_st_pc", "f_per", "b_pc"]
+        for chave in chaves_para_limpar:
+            if chave in st.session_state:
+                # Retorna listas e strings para o estado padrão vazio
+                st.session_state[chave] = [] if chave == "f_per" else "" if "b_" in chave else "Todos"
         st.rerun()
 
 col_f1, col_f2, col_f3 = st.columns(3)
 col_f4, col_f5, col_f6 = st.columns(3)
 
-with col_f1:
-    buscar_rm = st.text_input("Filtrar por Número da RM:", "").strip()
-with col_f2:
-    filtro_req = st.selectbox("Filtrar por Nome do Requisitante:", opcoes_requisitas)
-with col_f3:
-    filtro_comp = st.selectbox("Filtrar por Nome do Comprador:", opcoes_compradores)
+# Vinculamos chaves controladas (key) para cada input da tela
+with col_f1: 
+    buscar_rm = st.text_input("Filtrar por Número da RM:", key="b_rm").strip()
+with col_f2: 
+    filtro_req = st.selectbox("Filtrar por Nome do Requisitante:", opcoes_requisitas, key="f_req")
+with col_f3: 
+    filtro_comp = st.selectbox("Filtrar por Nome do Comprador:", opcoes_compradores, key="f_comp")
     
-with col_f4:
-    filtro_status_rm = st.selectbox("Status da RM:", ["Todos", "Aprovado", "Em Aprovação", "Reprovado"])
-with col_f5:
-    filtro_status_pc = st.selectbox("Status do PC:", ["Todos", "Aprovado", "Em Aprovação", "Reprovado"])
-with col_f6:
-    filtro_periodo = st.date_input("Intervalo (Data da Requisição):", value=[], format="DD/MM/YYYY")
+with col_f4: 
+    filtro_status_rm = st.selectbox("Status da RM:", ["Todos", "Aprovado", "Em Aprovação", "Reprovado"], key="f_st_rm")
+with col_f5: 
+    filtro_status_pc = st.selectbox("Status do PC:", ["Todos", "Aprovado", "Em Aprovação", "Reprovado"], key="f_st_pc")
+with col_f6: 
+    filtro_periodo = st.date_input("Intervalo (Data da Requisição):", value=[], format="DD/MM/YYYY", key="f_per")
 
-# 🚨 NOVA LINHA DE FILTRO EXTRA: Input de busca direta por Número do Pedido de Compra (PC)
-buscar_pc = st.text_input("Filtrar por Número do Pedido de Compra (Nr. PC):", "").strip()
+buscar_pc = st.text_input("Filtrar por Número do Pedido de Compra (Nr. PC):", key="b_pc").strip()
 
 # ==========================================================
 # 🚀 5. TRAVA DE VALIDAÇÃO DE FILTROS SELECIONADOS
 # ==========================================================
 # Atualizado para validar também se o campo do PC foi preenchido
+# Tratamento de contingência caso o reset limpe o texto das selectboxes para vazio
+if not filtro_req: filtro_req = "Todos"
+if not filtro_comp: filtro_comp = "Todos"
+if not filtro_status_rm: filtro_status_rm = "Todos"
+if not filtro_status_pc: filtro_status_pc = "Todos"
+
 tem_filtro_ativo = buscar_rm or buscar_pc or filtro_req != "Todos" or filtro_comp != "Todos" or filtro_status_rm != "Todos" or filtro_status_pc != "Todos" or len(filtro_periodo) == 2
 
 if not tem_filtro_ativo:
