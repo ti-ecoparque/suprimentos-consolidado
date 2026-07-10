@@ -27,7 +27,7 @@ def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_
     for col in ["data_ocorrencia", "data_ocorrencia_pc"]:
         if col in df_final.columns: df_final[col] = df_final[col].apply(lambda x: formatar_visual_seguro(x, incluir_hora=True))
 
-    # Resgate automático e estável do código do material
+    # Resgate do número do material estável
     df_final["mat"] = df_final["mat"].replace("---", None).fillna(df_final["mat_str"]).astype(str).str.strip()
 
     ordem_colunas_exibicao = ["nome_solicitante", "rm", "mat", "desc_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "comprador", "pedido_str", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc", "sit_item", "alerta_data"]
@@ -64,9 +64,7 @@ def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_
         mapa_indices = {orig_idx: pos for pos, orig_idx in enumerate(df_final.index) if orig_idx in df.index}
         
         for col in df.columns:
-            # 🚨 FIX ABSOLUTO: Desmembra a tupla do MultiIndex de forma explícita
-            # col[0] captura o bloco superior (ex: 'PEDIDO DE COMPRA MEGA')
-            # col[1] captura a coluna inferior (ex: 'Nr. PC')
+            # 🌟 A MÁGICA DO DESMEMBRAMENTO: Extrai os textos de dentro da tupla do MultiIndex
             grupo = col[0] if isinstance(col, tuple) else col
             sub_coluna = col[1] if isinstance(col, tuple) else col
             
@@ -80,7 +78,7 @@ def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_
                     if dias_diff > 0: esta_atrasado = True
                     elif dias_diff < 0: esta_adiantado = True
 
-                # Isola e colore de forma condicional apenas a última coluna de prazos
+                # Regra 1: Se for a coluna isolada de Alerta, pinta condicionalmente por prazos
                 if sub_coluna == "Alerta de Entrega":
                     if esta_atrasado:
                         estilos.at[i, col] = 'background-color: #fce4d6; color: #c65911; font-weight: bold; text-align: center;'
@@ -89,7 +87,7 @@ def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_
                     else:
                         estilos.at[i, col] = 'background-color: #e2f0d9; color: #375623; text-align: center;'
                 
-                # Saneia as cores de blocos pastéis nas colunas padrão
+                # Regra 2: Para o restante das colunas, preenche as cores pastel estáveis por blocos
                 else:
                     if grupo == "REQUISICAO DE MATERIAL MEGA": estilos.at[i, col] = 'background-color: #f2f7f2; color: #000000;'
                     elif grupo == "APPROVAL (RM)": estilos.at[i, col] = 'background-color: #e2f0d9; color: #000000;'
