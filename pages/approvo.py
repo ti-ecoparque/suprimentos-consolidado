@@ -284,38 +284,41 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             if col not in df_final.columns: df_final[col] = "---"
 
         # Converte em série de texto simples antes de aplicar os filtros pós-cruzamento
+        # Converte em série de texto simples antes de aplicar os filtros pós-cruzamento
         s_final_rm = df_final["rm"].iloc[:, 0] if isinstance(df_final["rm"], pd.DataFrame) else df_final["rm"]
         s_final_mat = df_final["mat"].iloc[:, 0] if isinstance(df_final["mat"], pd.DataFrame) else df_final["mat"]
-        df_final["rm"] = s_final_rm.fillna(df_final["rm_str"]).astype(str)
-        df_final["mat"] = s_final_mat.fillna(df_final["mat_str"]).astype(str)
+        
+        # Saneia nulos estruturais forçando a tipagem para String nas colunas oficiais
+        df_final["rm"] = s_final_rm.fillna(df_final.get("rm_str", "---")).astype(str).str.strip()
+        df_final["mat"] = s_final_mat.fillna(df_final.get("mat_str", "---")).astype(str).str.strip()
+        
+        df_final["pedido_str"] = df_final["pedido_str"].fillna("---").astype(str).str.strip()
+        df_final["nome_solicitante"] = df_final["nome_solicitante"].fillna("---").astype(str).str.strip()
+        df_final["comprador"] = df_final["comprador"].fillna("---").astype(str).str.strip()
 
+        # 🔥 BUSCA FLEXÍVEL OPERACIONAL: Filtra usando as colunas oficiais 'rm' e 'pedido_str'
         if buscar_rm and str(buscar_rm).strip() != "":
-            df_final = df_final[df_final["rm_str"].astype(str).str.strip() == str(buscar_rm).strip()]
+            v_rm_busca = str(buscar_rm).strip()
+            df_final = df_final[df_final["rm"].str.contains(v_rm_busca, na=False, regex=False)]
             
         if filtro_req != "Todos":
-            df_final = df_final[df_final["nome_solicitante"].astype(str).str.strip() == str(filtro_req).strip()]
+            df_final = df_final[df_final["nome_solicitante"] == str(filtro_req).strip()]
             
         if filtro_comp != "Todos":
-            df_final = df_final[df_final["comprador"].astype(str).str.strip() == str(filtro_comp).strip()]
+            df_final = df_final[df_final["comprador"] == str(filtro_comp).strip()]
             
-        # 🌟 VÍNCULO SEGURO: O filtro de PC só apaga linhas se houver um texto válido digitado na caixa!
         if buscar_pc and str(buscar_pc).strip() not in ["", "---", "nan", "None"]:
-            df_final = df_final[df_final["pedido_str"].astype(str).str.strip() == str(buscar_pc).strip()]
+            v_pc_busca = str(buscar_pc).strip()
+            df_final = df_final[df_final["pedido_str"].str.contains(v_pc_busca, na=False, regex=False)]
             
         if filtro_status_pc != "Todos":
             mapa_invertido = {"Aprovado": "A", "Em Aprovação": "E", "Reprovado": "R"}
             df_final = df_final[df_final["status_pc"].astype(str).str.strip().str.upper() == mapa_invertido[filtro_status_pc].upper()]
-            
-            
-        # O filtro de memória do PC só deve agir se o usuário realmente digitou algo no campo!
-        if buscar_pc and str(buscar_pc).strip() != "":
-            df_final = df_final[df_final["pedido_str"].astype(str).str.strip() == str(buscar_pc).strip()]
         
         # Se por flutuação o seq_item vier vazio em compras diretas, assume "---"
         df_final["seq_item"] = df_final.get("seq_item", pd.Series(dtype=str, index=df_final.index)).fillna("---").astype(str)
 
-        #A chave agora junta RM + Material + Sequencial (1 a 9). 
-        # Isso faz o Pandas entender que cada linha é única e lista as 9 linhas do parafuso!
+        # A chave junta RM + Material + Sequencial (1 a 9) listando as 9 linhas do parafuso intactas
         df_final["rm_mat_seq_key"] = df_final["rm"].astype(str) + "_" + df_final["mat"].astype(str) + "_" + df_final["seq_item"]
         df_final = df_final.drop_duplicates(subset=["rm_mat_seq_key"]).copy()
 
