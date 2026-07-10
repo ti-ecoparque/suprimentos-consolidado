@@ -64,12 +64,13 @@ def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_
         mapa_indices = {orig_idx: pos for pos, orig_idx in enumerate(df_final.index) if orig_idx in df.index}
         
         for col in df.columns:
-            # 🌟 A MÁGICA DO DESMEMBRAMENTO: Extrai os textos de dentro da tupla do MultiIndex
-            grupo = col[0] if isinstance(col, tuple) else col
-            sub_coluna = col[1] if isinstance(col, tuple) else col
+            # 🌟 RESOLUÇÃO DAS CORES: Extrai os textos do MultiIndex checando a tupla nativa
+            grupo = col[0] if isinstance(col, tuple) else str(col)
+            sub_coluna = col[1] if isinstance(col, tuple) else str(col)
             
             for i in df.index:
                 pos_lista = mapa_indices.get(i)
+                texto_celula = str(df.at[i, col]).strip()
                 
                 esta_atrasado = False
                 esta_adiantado = False
@@ -78,16 +79,18 @@ def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_
                     if dias_diff > 0: esta_atrasado = True
                     elif dias_diff < 0: esta_adiantado = True
 
-                # Regra 1: Se for a coluna isolada de Alerta, pinta condicionalmente por prazos
-                if sub_coluna == "Alerta de Entrega":
-                    if esta_atrasado:
+                # Regra 1: Coluna isolada de Alerta de Entrega
+                if sub_coluna == "Alerta de Entrega" or grupo == "ALERTA DE DATA":
+                    if "DATA NÃO INFORMADA" in texto_celula.upper():
+                        estilos.at[i, col] = 'background-color: #fff2cc; color: #7f6000; text-align: center;'
+                    elif esta_atrasado:
                         estilos.at[i, col] = 'background-color: #fce4d6; color: #c65911; font-weight: bold; text-align: center;'
                     elif esta_adiantado:
                         estilos.at[i, col] = 'background-color: #e6f2ff; color: #1f4e78; font-weight: bold; text-align: center;'
                     else:
                         estilos.at[i, col] = 'background-color: #e2f0d9; color: #375623; text-align: center;'
                 
-                # Regra 2: Para o restante das colunas, preenche as cores pastel estáveis por blocos
+                # Regra 2: Restante das colunas normais com mapeamento por blocos pastéis limpos
                 else:
                     if grupo == "REQUISICAO DE MATERIAL MEGA": estilos.at[i, col] = 'background-color: #f2f7f2; color: #000000;'
                     elif grupo == "APPROVAL (RM)": estilos.at[i, col] = 'background-color: #e2f0d9; color: #000000;'
