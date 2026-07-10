@@ -27,6 +27,10 @@ def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_
     for col in ["data_ocorrencia", "data_ocorrencia_pc"]:
         if col in df_final.columns: df_final[col] = df_final[col].apply(lambda x: formatar_visual_seguro(x, incluir_hora=True))
 
+    # 🌟 FIX DEFINITIVO DO MATERIAL: Se a coluna 'mat' original falhar ou vier vazia,
+    # força o Pandas a resgatar o código numérico real armazenado na chave estável 'mat_str'
+    df_final["mat"] = df_final["mat"].replace("---", None).fillna(df_final["mat_str"]).astype(str).str.strip()
+
     ordem_colunas_exibicao = ["nome_solicitante", "rm", "mat", "desc_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "comprador", "pedido_str", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc", "sit_item", "alerta_data"]
     colunas_multi_index = {
         "nome_solicitante": ("REQUISICAO DE MATERIAL MEGA", "Requisitante"), "rm": ("REQUISICAO DE MATERIAL MEGA", "Nr. RM"), "mat": ("REQUISICAO DE MATERIAL MEGA", "Nr. Material"), "desc_item": ("REQUISICAO DE MATERIAL MEGA", "Descrição"), "qtd_solicitada": ("REQUISICAO DE MATERIAL MEGA", "Qt. Sol."), "data_emissao": ("REQUISICAO DE MATERIAL MEGA", "Data da Requisição"), "data_necessidade": ("REQUISICAO DE MATERIAL MEGA", "Data da Nec."),
@@ -40,7 +44,7 @@ def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_
     df_exibicao.columns = pd.MultiIndex.from_tuples([colunas_multi_index[c] for c in ordem_colunas_exibicao])
 
     df_excel = df_final[ordem_colunas_exibicao].copy()
-    df_excel.columns = [f"{colunas_multi_index[c]} - {colunas_multi_index[c]}" for c in ordem_colunas_exibicao]
+    df_excel.columns = [f"{colunas_multi_index[c][0]} - {colunas_multi_index[c][1]}" for c in ordem_colunas_exibicao]
 
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -61,14 +65,12 @@ def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_
         mapa_indices = {orig_idx: pos for pos, orig_idx in enumerate(df_final.index) if orig_idx in df.index}
         
         for col in df.columns:
-            # Captura a tupla do MultiIndex para saber a qual bloco de cabeçalho a coluna pertence
             grupo = col[0]
             sub_coluna = col[1]
             
             for i in df.index:
                 pos_lista = mapa_indices.get(i)
                 
-                # 🚨 CÁLCULO CIRÚRGICO DE PRAZOS: Identifica o estado logístico da linha
                 esta_atrasado = False
                 esta_adiantado = False
                 if pos_lista is not None and lista_entrega_dt_bruta[pos_lista] is not None and lista_necessidade_dt_bruta[pos_lista] is not None:
@@ -76,7 +78,6 @@ def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_
                     if dias_diff > 0: esta_atrasado = True
                     elif dias_diff < 0: esta_adiantado = True
 
-                # 🌟 NOVA REGRA CORES: Se for a coluna de alerta, aplica a cor condicional específica de prazos
                 if sub_coluna == "Alerta de Entrega":
                     if esta_atrasado:
                         estilos.at[i, col] = 'background-color: #fce4d6; color: #c65911; font-weight: bold; text-align: center;'
@@ -84,8 +85,6 @@ def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_
                         estilos.at[i, col] = 'background-color: #e6f2ff; color: #1f4e78; font-weight: bold; text-align: center;'
                     else:
                         estilos.at[i, col] = 'background-color: #e2f0d9; color: #375623; text-align: center;'
-                
-                # Se for qualquer outra coluna normal do painel, mantém a cor pastel de bloco corporativo estável
                 else:
                     if grupo == "REQUISICAO DE MATERIAL MEGA": estilos.at[i, col] = 'background-color: #f2f7f2; color: #000000;'
                     elif grupo == "APPROVAL (RM)": estilos.at[i, col] = 'background-color: #e2f0d9; color: #000000;'
