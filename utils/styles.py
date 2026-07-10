@@ -36,13 +36,18 @@ def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_
         "sit_item": ("SITUAÇÃO DO ITEM", "Situação"), "alerta_data": ("ALERTA DE DATA", "Alerta de Entrega")
     }
 
+    # 1. Cria a base estável para visualização no Streamlit (Mantém o MultiIndex na tela)
     df_exibicao = df_final[ordem_colunas_exibicao].copy()
     df_exibicao.columns = pd.MultiIndex.from_tuples([colunas_multi_index[c] for c in ordem_colunas_exibicao])
 
-    # 📥 BOTÃO EXECUTIVO DE DOWNLOAD DO EXCEL
+    # 2. Cria uma cópia limpa e achata o cabeçalho exclusivamente para salvar no Excel (.xlsx)
+    df_excel = df_final[ordem_colunas_exibicao].copy()
+    df_excel.columns = [f"{colunas_multi_index[c][0]} - {colunas_multi_index[c][1]}" for c in ordem_colunas_exibicao]
+
+    # 📥 GERAÇÃO CONSOLIDADA EM BYTES IMUNE A ERROS
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df_exibicao.to_excel(writer, index=False, sheet_name='Approvo Status')
+        df_excel.to_excel(writer, index=False, sheet_name='Approvo Status')
     dados_excel = output.getvalue()
 
     st.download_button(
