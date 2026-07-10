@@ -8,7 +8,6 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     if df_rm_bruto.empty: df_rm_bruto = pd.DataFrame(columns=cols_exclusivas_rm)
     if df_pc_bruto.empty: df_pc_bruto = pd.DataFrame(columns=cols_exclusivas_pc)
 
-    # 1. Limpeza RM
     df_rm_limpo = pd.DataFrame(index=df_rm_bruto.index)
     for c in df_rm_bruto.columns:
         if c in cols_exclusivas_rm:
@@ -18,7 +17,6 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     df_rm_limpo["mat_str"] = df_rm_limpo.get("mat", "---")
     df_rm_limpo = df_rm_limpo.drop_duplicates().copy()
 
-    # 2. Limpeza Vínculos
     if not df_vinculo.empty:
         df_vinculo_limpo = pd.DataFrame(index=df_vinculo.index)
         for c in ["rm", "pedido"]:
@@ -32,7 +30,6 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
         df_rm_consolidada = df_rm_limpo.copy()
         df_rm_consolidada["pedido_str"] = "---"
 
-    # 3. Limpeza PC
     df_pc_limpo = pd.DataFrame(index=df_pc_bruto.index)
     if not df_pc_bruto.empty:
         df_pc_bruto["pedido_str"] = df_pc_bruto.get("pedido", "---")
@@ -85,11 +82,10 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
             df_final.loc[idx, "pedido_str"] = "Sem PC / Estoque"
             df_final.loc[idx, "comprador"] = "Almoxarifado"
 
-    # Cálculo de Datas
     lista_alertas_data, lista_entrega_dt_bruta, lista_necessidade_dt_bruta, indices_para_manter = [], [], [], []
     ignorar_calendario = (buscar_rm != "") or (buscar_pc != "")
-    data_inicio_filtro = filtro_periodo[0] if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2 else None
-    data_fim_filtro = filtro_periodo[1] if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2 else None
+    data_inicio_filtro = filtro_periodo if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2 else None
+    data_fim_filtro = filtro_periodo if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2 else None
 
     for idx in df_final.index:
         val_entrega = df_final.loc[idx, "entrega"]
@@ -100,7 +96,6 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
             if pd.isna(valor) or str(valor).strip() in ["", "---", "nan", "None", "NaT"]: return None
             try:
                 if hasattr(valor, "date"): return valor.date()
-                # 🌟 FIX CIRÚRGICO DA DATA: Fatiamento de string seguro de 10 dígitos (AAAA-MM-DD)
                 t_str = str(valor).strip()[:10]
                 if "-" in t_str: return datetime.datetime.strptime(t_str, "%Y-%m-%d").date()
                 elif "/" in t_str: return datetime.datetime.strptime(t_str, "%d/%m/%Y").date()

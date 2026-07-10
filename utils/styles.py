@@ -15,7 +15,7 @@ def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_
         if pd.isna(valor) or str(valor).strip() in ["", "---", "nan", "None", "NaT"]: return "Data não informada"
         try:
             if hasattr(valor, "strftime"): return valor.strftime("%d/%m/%Y %H:%M" if incluir_hora else "%d/%m/%Y")
-            t_str = str(valor).strip().split(" ").split("T")
+            t_str = str(valor).strip()[:10]
             if "-" in t_str: return datetime.datetime.strptime(t_str, "%Y-%m-%d").strftime("%d/%m/%Y")
             return valor
         except Exception: pass
