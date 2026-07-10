@@ -27,8 +27,7 @@ def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_
     for col in ["data_ocorrencia", "data_ocorrencia_pc"]:
         if col in df_final.columns: df_final[col] = df_final[col].apply(lambda x: formatar_visual_seguro(x, incluir_hora=True))
 
-    # 🌟 FIX DEFINITIVO DO MATERIAL: Se a coluna 'mat' original falhar ou vier vazia,
-    # força o Pandas a resgatar o código numérico real armazenado na chave estável 'mat_str'
+    # Resgate automático e estável do código do material
     df_final["mat"] = df_final["mat"].replace("---", None).fillna(df_final["mat_str"]).astype(str).str.strip()
 
     ordem_colunas_exibicao = ["nome_solicitante", "rm", "mat", "desc_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "comprador", "pedido_str", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc", "sit_item", "alerta_data"]
@@ -44,7 +43,7 @@ def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_
     df_exibicao.columns = pd.MultiIndex.from_tuples([colunas_multi_index[c] for c in ordem_colunas_exibicao])
 
     df_excel = df_final[ordem_colunas_exibicao].copy()
-    df_excel.columns = [f"{colunas_multi_index[c][0]} - {colunas_multi_index[c][1]}" for c in ordem_colunas_exibicao]
+    df_excel.columns = [f"{colunas_multi_index[c]} - {colunas_multi_index[c]}" for c in ordem_colunas_exibicao]
 
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -65,8 +64,11 @@ def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_
         mapa_indices = {orig_idx: pos for pos, orig_idx in enumerate(df_final.index) if orig_idx in df.index}
         
         for col in df.columns:
-            grupo = col[0]
-            sub_coluna = col[1]
+            # 🚨 FIX ABSOLUTO: Desmembra a tupla do MultiIndex de forma explícita
+            # col[0] captura o bloco superior (ex: 'PEDIDO DE COMPRA MEGA')
+            # col[1] captura a coluna inferior (ex: 'Nr. PC')
+            grupo = col[0] if isinstance(col, tuple) else col
+            sub_coluna = col[1] if isinstance(col, tuple) else col
             
             for i in df.index:
                 pos_lista = mapa_indices.get(i)
@@ -78,6 +80,7 @@ def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_
                     if dias_diff > 0: esta_atrasado = True
                     elif dias_diff < 0: esta_adiantado = True
 
+                # Isola e colore de forma condicional apenas a última coluna de prazos
                 if sub_coluna == "Alerta de Entrega":
                     if esta_atrasado:
                         estilos.at[i, col] = 'background-color: #fce4d6; color: #c65911; font-weight: bold; text-align: center;'
@@ -85,6 +88,8 @@ def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_
                         estilos.at[i, col] = 'background-color: #e6f2ff; color: #1f4e78; font-weight: bold; text-align: center;'
                     else:
                         estilos.at[i, col] = 'background-color: #e2f0d9; color: #375623; text-align: center;'
+                
+                # Saneia as cores de blocos pastéis nas colunas padrão
                 else:
                     if grupo == "REQUISICAO DE MATERIAL MEGA": estilos.at[i, col] = 'background-color: #f2f7f2; color: #000000;'
                     elif grupo == "APPROVAL (RM)": estilos.at[i, col] = 'background-color: #e2f0d9; color: #000000;'
