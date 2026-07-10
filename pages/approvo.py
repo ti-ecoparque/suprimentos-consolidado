@@ -323,13 +323,22 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
             val_emissao = df_final.loc[idx, "data_emissao"]
             
             def converter_para_data_nativa(valor):
-                if pd.isna(valor) or str(valor).strip() in ["", "---", "nan", "None", "NaT"]: return None
+                if pd.isna(valor) or str(valor).strip() in ["", "---", "nan", "None", "NaT"]: 
+                    return None
                 try:
-                    if hasattr(valor, "date"): return valor.date()
-                    t_str = str(valor).strip().split(" ")
-                    if "-" in t_str: return datetime.datetime.strptime(t_str, "%Y-%m-%d").date()
-                    elif "/" in t_str: return datetime.datetime.strptime(t_str, "%d/%m/%Y").date()
-                except Exception: pass
+                    if hasattr(valor, "date"): 
+                        return valor.date()
+                    
+                    # Limpa a string pegando apenas os primeiros 10 caracteres (Ignora horas e milissegundos)
+                    t_str = str(valor).strip().split(" ")[0].split("T")[0]
+                    
+                    # Faz o parse seguro baseado no separador textual
+                    if "-" in t_str: 
+                        return datetime.datetime.strptime(t_str, "%Y-%m-%d").date()
+                    elif "/" in t_str: 
+                        return datetime.datetime.strptime(t_str, "%d/%m/%Y").date()
+                except Exception: 
+                    pass
                 return None
 
             dt_ent = converter_para_data_nativa(val_entrega)
