@@ -340,15 +340,19 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         df_final = df_final.loc[indices_para_manter].copy()
         df_final["alerta_data"] = lista_alertas_data
 
+        # 🌟 A TRAVA ENTRA AQUI (Com exatamente 8 espaços de recuo, alinhada com o df_final de cima):
+        if df_final.empty:
+            st.warning("⚠️ Nenhum registro corresponde aos critérios selecionados no período filtrado.")
+            st.stop()
     except Exception as e:
         st.error(f"❌ Erro crítico ao consolidar as visões no Cenário D: {e}")
         st.stop()
 # ==========================================================
 # 🚨 TRAVAS DE SEGURANÇA E MULTIINDEX GLOBAIS (MARGEM ZERO)
 # ==========================================================
-if df_final.empty:
-    st.warning("⚠️ Nenhum registro corresponde aos critérios selecionados no período filtrado.")
-    st.stop()
+#if df_final.empty:
+#    st.warning("⚠️ Nenhum registro corresponde aos critérios selecionados no período filtrado.")
+#    st.stop()
 
 # ==========================================================
 # 📊 8. MAPEAMENTO, TRADUÇÃO E PROCESSAMENTO COMPLETO DE STRINGS
