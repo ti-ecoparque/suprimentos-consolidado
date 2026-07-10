@@ -299,7 +299,10 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
         if filtro_status_pc != "Todos":
             mapa_invertido = {"Aprovado": "A", "Em Aprovação": "E", "Reprovado": "R"}
             df_final = df_final[df_final["status_pc"].astype(str).str.strip().str.upper() == mapa_invertido[filtro_status_pc].upper()]
-
+        # O filtro de memória do PC só deve agir se o usuário realmente digitou algo no campo!
+        if buscar_pc and str(buscar_pc).strip() != "":
+            df_final = df_final[df_final["pedido_str"].astype(str).str.strip() == str(buscar_pc).strip()]
+        
         # Se por flutuação o seq_item vier vazio em compras diretas, assume "---"
         df_final["seq_item"] = df_final.get("seq_item", pd.Series(dtype=str, index=df_final.index)).fillna("---").astype(str)
 
