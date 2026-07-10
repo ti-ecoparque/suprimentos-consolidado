@@ -389,7 +389,7 @@ with st.spinner("Buscando e cruzando visões comerciais..."):
 # ==========================================================
 # 🚨 TRAVAS DE SEGURANÇA E MULTIINDEX GLOBAIS (MARGEM ZERO)
 # ==========================================================
-if df_final.empty:
+if df_final.empty and df_pc_bruto.empty:
     st.warning("⚠️ Nenhum registro corresponde aos critérios selecionados no período filtrado.")
     st.stop()
 
