@@ -64,7 +64,7 @@ def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_
         mapa_indices = {orig_idx: pos for pos, orig_idx in enumerate(df_final.index) if orig_idx in df.index}
         
         for col in df.columns:
-            # 🌟 RESOLUÇÃO DAS CORES: Extrai os textos do MultiIndex checando a tupla nativa
+            # 🌟 CORREÇÃO DO MULTIINDEX: Puxa explicitamente o nível 0 e o nível 1 da tupla
             grupo = col[0] if isinstance(col, tuple) else str(col)
             sub_coluna = col[1] if isinstance(col, tuple) else str(col)
             
