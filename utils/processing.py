@@ -88,8 +88,8 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     # Cálculo de Datas
     lista_alertas_data, lista_entrega_dt_bruta, lista_necessidade_dt_bruta, indices_para_manter = [], [], [], []
     ignorar_calendario = (buscar_rm != "") or (buscar_pc != "")
-    data_inicio_filtro = filtro_periodo if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2 else None
-    data_fim_filtro = filtro_periodo if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2 else None
+    data_inicio_filtro = filtro_periodo[0] if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2 else None
+    data_fim_filtro = filtro_periodo[1] if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2 else None
 
     for idx in df_final.index:
         val_entrega = df_final.loc[idx, "entrega"]
@@ -100,7 +100,8 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
             if pd.isna(valor) or str(valor).strip() in ["", "---", "nan", "None", "NaT"]: return None
             try:
                 if hasattr(valor, "date"): return valor.date()
-                t_str = str(valor).strip().split(" ").split("T")
+                # 🌟 FIX CIRÚRGICO DA DATA: Fatiamento de string seguro de 10 dígitos (AAAA-MM-DD)
+                t_str = str(valor).strip()[:10]
                 if "-" in t_str: return datetime.datetime.strptime(t_str, "%Y-%m-%d").date()
                 elif "/" in t_str: return datetime.datetime.strptime(t_str, "%d/%m/%Y").date()
             except Exception: pass
