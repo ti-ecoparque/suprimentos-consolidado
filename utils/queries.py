@@ -5,7 +5,7 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
     df_pc_bruto = pd.DataFrame()
     df_vinculo = pd.DataFrame()
 
-    # A. Rota Isolada por Número da RM
+    # Rota A: Busca isolada por número de RM
     if buscar_rm and str(buscar_rm).strip() != "":
         rm_alvo = str(buscar_rm).strip()
         rm_parametro = int(rm_alvo) if rm_alvo.isdigit() else rm_alvo
@@ -16,19 +16,13 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
         res_vinculo = supabase.table("pedido_compra").select("rm", "pedido").eq("rm", int(rm_alvo) if rm_alvo.isdigit() else 0).execute()
         df_vinculo = pd.DataFrame(res_vinculo.data)
         
-        if df_vinculo.empty:
-            res_vinculo_obs = supabase.table("pedido_compra").select("rm", "pedido").ilike("observacao", f"%{rm_alvo}%").execute()
-            df_vinculo = pd.DataFrame(res_vinculo_obs.data)
-        
         if not df_vinculo.empty and "pedido" in df_vinculo.columns:
-            # 🌟 GARANTIA NATIVA DA CHAVE: Duplica o número do PC para a string técnica
-            df_vinculo["pedido_str"] = df_vinculo["pedido"].astype(str).str.replace('.0', '', regex=False).str.strip()
             lista_peds_pontes = [str(int(float(x))) for x in df_vinculo["pedido"].unique() if pd.notna(x)]
             if lista_peds_pontes:
                 res_pc = supabase.table("vw_approvo_pc").select("*").in_("pedido", lista_peds_pontes).limit(500).execute()
                 df_pc_bruto = pd.DataFrame(res_pc.data)
-                
-    # B. Rota Isolada por Número do PC
+
+    # Rota B: Busca isolada por número de PC
     elif buscar_pc and str(buscar_pc).strip() != "":
         pc_alvo = str(buscar_pc).strip()
         query_pc = supabase.table("vw_approvo_pc").select("*").eq("pedido", pc_alvo)
@@ -43,7 +37,7 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
             res_rm = supabase.table("vw_approvo_rm").select("*").in_("rm", lista_rms_pontes).execute()
             df_rm_bruto = pd.DataFrame(res_rm.data)
 
-    # C. Fluxo de Filtros de Combinação Padrão (O que estava rodando no print!)
+    # Rota C: Rota de filtros suspensos de sexta-feira de manhã (O cérebro original!)
     else:
         query_rm = supabase.table("vw_approvo_rm").select("*")
         if filtro_req != "Todos": 
@@ -53,7 +47,6 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
         res_rm = query_rm.limit(500).execute()
         df_rm_bruto = pd.DataFrame(res_rm.data)
 
-        # 🌟 RESGATE TOTAL DE AMARRAÇÕES: Garante uma volumetria robusta na memória RAM
         query_vinculo = supabase.table("pedido_compra").select("rm", "pedido").limit(2000)
         res_vinculo = query_vinculo.execute()
         df_vinculo = pd.DataFrame(res_vinculo.data)
@@ -74,7 +67,7 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
             res_pc = query_pc.limit(500).execute()
             df_pc_bruto = pd.DataFrame(res_pc.data)
 
-    # Força a criação das chaves de strings técnicas direto na saída do banco para o Pandas aceitar o merge!
+    # Garante a injeção nativa de strings técnicas puras que o Pandas espera para cruzar
     if not df_rm_bruto.empty and "rm" in df_rm_bruto.columns:
         df_rm_bruto["rm_str"] = df_rm_bruto["rm"].astype(str).str.replace('.0', '', regex=False).str.strip()
         df_rm_bruto["mat_str"] = df_rm_bruto["mat"].astype(str).str.replace('.0', '', regex=False).str.strip()
