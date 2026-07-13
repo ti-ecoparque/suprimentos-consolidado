@@ -3,12 +3,8 @@ import datetime
 
 def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, buscar_pc, filtro_req, filtro_comp, filtro_status_pc, filtro_periodo):
     cols_exclusivas_rm = ["nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "rm_str", "mat_str", "seq_item"]
-    cols_exclusivas_pc = ["pedido", "mat", "nome_solicitante", "entrega", "quantidade", "status_documento", "data_ocorrencia", "nome_aprovador", "pedido_str", "mat_str"]
-
-    if df_rm_bruto.empty: df_rm_bruto = pd.DataFrame(columns=cols_exclusivas_rm)
-    if df_pc_bruto.empty: df_pc_bruto = pd.DataFrame(columns=cols_exclusivas_pc)
-
-    # 1. Limpeza e isolamento estrito da tabela de RMs
+    
+    # 1. Isolamento Estrito da tabela de RMs
     df_rm_limpo = pd.DataFrame(index=df_rm_bruto.index)
     for c in df_rm_bruto.columns:
         if c in cols_exclusivas_rm:
@@ -18,7 +14,7 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     df_rm_limpo["mat_str"] = df_rm_limpo.get("mat", "---")
     df_rm_limpo = df_rm_limpo.drop_duplicates().copy()
 
-    # 2. Limpeza e isolamento estrito da tabela de Vínculos
+    # 2. Isolamento Estrito da tabela de Vínculos
     if not df_vinculo.empty:
         df_vinculo_limpo = pd.DataFrame(index=df_vinculo.index)
         for c in ["rm", "pedido"]:
@@ -32,25 +28,38 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
         df_rm_consolidada = df_rm_limpo.copy()
         df_rm_consolidada["pedido_str"] = "---"
 
-    # 3. Limpeza e isolamento estrito da tabela de Pedidos (PC)
+    # 3. Isolamento e Rebatizamento Cirúrgico do PC (Mata a colisão de nomes de colunas!)
     df_pc_limpo = pd.DataFrame(index=df_pc_bruto.index)
     if not df_pc_bruto.empty:
-        df_pc_bruto["pedido_str"] = df_pc_bruto.get("pedido", "---")
-        df_pc_bruto["mat_str"] = df_pc_bruto.get("mat", "---")
-        for c in df_pc_bruto.columns:
-            if c in cols_exclusivas_pc:
-                s = df_pc_bruto[c].iloc[:, 0] if isinstance(df_pc_bruto[c], pd.DataFrame) else df_pc_bruto[c]
+        # Rebatiza direto na origem para não colidir com os nomes da RM no loop
+        df_pc_bruto_copy = df_pc_bruto.copy()
+        df_pc_bruto_copy.rename(columns={
+            "nome_solicitante": "comprador",
+            "pedido": "pedido_str",
+            "status_documento": "status_pc",
+            "data_ocorrencia": "data_ocorrencia_pc",
+            "nome_aprovador": "nome_aprovador_pc",
+            "quantidade": "quantidade_comprada"
+        }, inplace=True, errors="ignore")
+
+        cols_finais_pc = ["pedido_str", "mat", "comprador", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"]
+        
+        for c in df_pc_bruto_copy.columns:
+            if c in cols_finais_pc or c == "mat_str":
+                s = df_pc_bruto_copy[c].iloc[:, 0] if isinstance(df_pc_bruto_copy[c], pd.DataFrame) else df_pc_bruto_copy[c]
                 df_pc_limpo[c] = s.fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
 
-    df_pc_limpo["pedido_str"] = df_pc_limpo.get("pedido", "---")
-    df_pc_limpo["mat_str"] = df_pc_limpo.get("mat", "---")
-    df_pc_limpo.rename(columns={"mat":"mat", "nome_solicitante":"comprador", "status_documento":"status_pc", "data_oficial_ocorrencia":"data_ocorrencia_pc", "data_ocorrencia":"data_ocorrencia_pc", "nome_aprovador":"nome_aprovador_pc", "quantidade":"quantidade_comprada"}, inplace=True, errors="ignore")
+    if "mat_str" not in df_pc_limpo.columns and "mat" in df_pc_limpo.columns:
+        df_pc_limpo["mat_str"] = df_pc_limpo["mat"].astype(str).str.replace('.0', '', regex=False).str.strip()
+    
+    if "pedido_str" not in df_pc_limpo.columns: df_pc_limpo["pedido_str"] = "---"
+    if "mat_str" not in df_pc_limpo.columns: df_pc_limpo["mat_str"] = "---"
     df_pc_limpo = df_pc_limpo.drop_duplicates().copy()
 
-    # 🌟 A LÓGICA DE HOJE DE MANHÃ: Junção flexível apenas por material (mat_str)
-    # Isso força o preenchimento dos compradores e datas ignorando os índices de pedidos vazios!
+    # 🌟 CRUZAMENTO FLEXÍVEL DE HOJE DE MANHÃ POR MATERIAL (mat_str)
     df_final = pd.merge(df_rm_consolidada, df_pc_limpo, on=["mat_str"], how="outer")
 
+    # Consolida as chaves de controle de strings pós-merge
     if "pedido_str_y" in df_final.columns:
         df_final["pedido_str"] = df_final["pedido_str_y"].replace("---", "").fillna(df_final.get("pedido_str_x", "---"))
     elif "pedido_str_x" in df_final.columns:
@@ -65,11 +74,7 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     df_final["rm"] = s_final_rm.fillna(df_final.get("rm_str", "---")).astype(str).str.strip()
     df_final["mat"] = s_final_mat.fillna(df_final.get("mat_str", "---")).astype(str).str.strip()
 
-    df_final["pedido_str"] = df_final["pedido_str"].fillna("---").astype(str).str.strip()
-    df_final["nome_solicitante"] = df_final["nome_solicitante"].fillna("---").astype(str).str.strip()
-    df_final["comprador"] = df_final["comprador"].fillna("---").astype(str).str.strip()
-
-    # Filtros de interface
+    # Filtros de interface em memória RAM
     if buscar_rm:
         df_final = df_final[df_final["rm"].str.contains(str(buscar_rm).strip(), na=False, regex=False)]
     if filtro_req != "Todos":
