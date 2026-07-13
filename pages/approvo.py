@@ -1,5 +1,6 @@
 import streamlit as st
 import os
+import datetime
 from supabase import create_client
 
 # Importação dos sub-módulos utilitários da pasta utils
@@ -37,26 +38,25 @@ except Exception: pass
 st.markdown("#### 🔍 Painel de Filtros Globais")
 
 # ==========================================================
-# 🧱 GRID DE FILTROS ORGANIZADOS
+# 🧱 GRID DE FILTROS REORGANIZADOS (3 COLUNAS VERTICAIS)
 # ==========================================================
-col_f1, col_f2, col_f3 = st.columns(3)
-col_f4, col_f5, col_f6 = st.columns(3)
+col_esquerda, col_centro, col_direita = st.columns(3)
 
-with col_f1: 
+# 📐 COLUNA DA ESQUERDA
+with col_esquerda:
+    filtro_status_pc = st.selectbox("Status do PC:", ["Todos", "Aprovado", "Em Aprovação", "Reprovado"], key="f_st_pc")
     filtro_req = st.selectbox("Filtrar por Nome do Requisitante:", opcoes_requisitas, key="f_req")
-with col_f2: 
-    buscar_rm = st.text_input("Filtrar por Número da RM:", key="b_rm").strip()
-with col_f3: 
     filtro_comp = st.selectbox("Filtrar por Nome do Comprador:", opcoes_compradores, key="f_comp")
 
-with col_f4: 
-    filtro_periodo = st.date_input("Intervalo (Data da Requisição):", value=[], format="DD/MM/YYYY", key="f_per")
-with col_f5: 
+# 📐 COLUNA DO CENTRO
+with col_centro:
+    buscar_rm = st.text_input("Filtrar por Número da RM:", key="b_rm").strip()
     buscar_pc = st.text_input("Filtrar por Número do Pedido de Compra (Nr. PC):", key="b_pc").strip()
-with col_f6: 
-    filtro_status_rm = st.selectbox("Status da RM:", ["Todos", "Aprovado", "Em Aprovação", "Reprovado"], key="f_st_rm")
 
-filtro_status_pc = st.selectbox("Status do PC:", ["Todos", "Aprovado", "Em Aprovação", "Reprovado"], key="f_st_pc")
+# 📐 COLUNA DA DIREITA
+with col_direita:
+    filtro_status_rm = st.selectbox("Status da RM:", ["Todos", "Aprovado", "Em Aprovação", "Reprovado"], key="f_st_rm")
+    filtro_periodo = st.date_input("Intervalo (Data da Requisição):", value=[], format="DD/MM/YYYY", key="f_per")
 
 st.write("") 
 
@@ -84,19 +84,16 @@ if df_final.empty:
     st.stop()
 
 # ==========================================================
-# 🚨 RETRANCA DE LAYOUT ATUALIZADA: BOTÕES UNIFICADOS LADO A LADO
+# 🚨 RETRANCA DE LAYOUT: BOTÕES UNIFICADOS LADO A LADO
 # ==========================================================
 col_btn_esquerda, col_btn_direita = st.columns(2)
 
-# 1. Desenha o botão de limpar de forma única no lado esquerdo da tabela
 with col_btn_esquerda:
     def resetar_filtros_callback():
         for k in ["b_rm", "f_req", "f_comp", "f_st_rm", "f_st_pc", "f_per", "b_pc"]:
             if k in st.session_state:
                 st.session_state[k] = [] if k == "f_per" else "" if "b_" in k else "Todos"
 
-    # Adicionada chave única para evitar qualquer colisão futura no Streamlit
     st.button("♻️ Limpar Filtros", on_click=resetar_filtros_callback, use_container_width=True, key="btn_limpar_exclusivo")
 
-# 2. Envia a coluna da direita para o módulo de estilos posicionar o Exportar XLSX perfeitamente
 renderizar_grid_multiindex_colorido(df_final, lista_ent, lista_nec, col_btn_direita)
