@@ -36,14 +36,6 @@ except Exception: pass
 
 st.markdown("#### 🔍 Painel de Filtros Globais")
 
-# ♻️ Função segura de reset nativo via Session State
-def resetar_filtros_callback():
-    for k in ["b_rm", "f_req", "f_comp", "f_st_rm", "f_st_pc", "f_per", "b_pc"]:
-        if k in st.session_state:
-            st.session_state[k] = [] if k == "f_per" else "" if "b_" in k else "Todos"
-
-st.button("♻️ Limpar Filtros", on_click=resetar_filtros_callback, use_container_width=True)
-
 # ==========================================================
 # 🧱 GRID DE FILTROS ORGANIZADOS
 # ==========================================================
@@ -68,7 +60,6 @@ filtro_status_pc = st.selectbox("Status do PC:", ["Todos", "Aprovado", "Em Aprov
 
 st.write("") 
 
-# (O seu código de higienização de filtros continua normal acima...)
 if not filtro_req: filtro_req = "Todos"
 if not filtro_comp: filtro_comp = "Todos"
 if not filtro_status_rm: filtro_status_rm = "Todos"
@@ -76,7 +67,7 @@ if not filtro_status_pc: filtro_status_pc = "Todos"
 
 tem_filtro_ativo = buscar_rm or buscar_pc or filtro_req != "Todos" or filtro_comp != "Todos" or filtro_status_rm != "Todos" or filtro_status_pc != "Todos" or (isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2)
 if not tem_filtro_ativo:
-    st.info("💡 Selecione qualquer filtro acima para carregar o painel.")
+    st.info("💡 Selecione qualquer filtro acima para carregar o painel consolidado.")
     st.stop()
 
 with st.spinner("Processando árvore de suprimentos..."):
@@ -93,19 +84,19 @@ if df_final.empty:
     st.stop()
 
 # ==========================================================
-# 🚨 NOVA RETRANCA DE LAYOUT: BOTÕES LADO A LADO NO TOPO DA TABELA
+# 🚨 RETRANCA DE LAYOUT ATUALIZADA: BOTÕES UNIFICADOS LADO A LADO
 # ==========================================================
 col_btn_esquerda, col_btn_direita = st.columns(2)
 
-# 1. Desenha o botão de limpar perfeitamente encaixado no lado esquerdo
+# 1. Desenha o botão de limpar de forma única no lado esquerdo da tabela
 with col_btn_esquerda:
-    # Função segura de reset nativo via Session State
     def resetar_filtros_callback():
         for k in ["b_rm", "f_req", "f_comp", "f_st_rm", "f_st_pc", "f_per", "b_pc"]:
             if k in st.session_state:
                 st.session_state[k] = [] if k == "f_per" else "" if "b_" in k else "Todos"
 
-    st.button("♻️ Limpar Filtros", on_click=resetar_filtros_callback, use_container_width=True)
+    # Adicionada chave única para evitar qualquer colisão futura no Streamlit
+    st.button("♻️ Limpar Filtros", on_click=resetar_filtros_callback, use_container_width=True, key="btn_limpar_exclusivo")
 
-# 2. Desenha a tabela em largura cheia e joga o botão de exportar para a col_btn_direita
+# 2. Envia a coluna da direita para o módulo de estilos posicionar o Exportar XLSX perfeitamente
 renderizar_grid_multiindex_colorido(df_final, lista_ent, lista_nec, col_btn_direita)
