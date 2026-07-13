@@ -29,7 +29,7 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 st.markdown("#### 🔍 Painel de Filtros Globais")
 
 # ==========================================================
-# 🧱 GRID DE FILTROS TOTALMENTE BASEADOS EM DIGITAÇÃO LIVRE
+# 🧱 GRID DE FILTROS REORGANIZADOS
 # ==========================================================
 col_esquerda, col_centro, col_direita = st.columns(3)
 
@@ -44,7 +44,6 @@ with col_centro:
 
 with col_direita:
     filtro_status_pc = st.selectbox("Status do PC:", ["Todos", "Aprovado", "Em Aprovação", "Reprovado"], key="f_st_pc")
-    # 🌟 A EVOLUÇÃO: Comprador agora também é entrada por texto livre inteligente!
     filtro_comp = st.text_input("Filtrar por Nome do Comprador (Ex: Junior, Thais):", key="f_comp").strip()
 
 st.write("") 
@@ -56,6 +55,20 @@ if not filtro_status_rm: filtro_status_rm = "Todos"
 if not filtro_status_pc: filtro_status_pc = "Todos"
 
 tem_filtro_ativo = buscar_rm or buscar_pc or filtro_req != "Todos" or filtro_comp != "Todos" or filtro_status_rm != "Todos" or filtro_status_pc != "Todos" or (isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2)
+
+# ==========================================================
+# 🚨 CONTAINER DE BOTÕES FIXADO NO TOPO (MUDADO PARA CIMA!)
+# ==========================================================
+col_btn_esquerda, col_btn_direita = st.columns(2)
+
+with col_btn_esquerda:
+    def resetar_filtros_callback():
+        for k in ["b_rm", "f_req", "f_comp", "f_st_rm", "f_st_pc", "f_per", "b_pc"]:
+            if k in st.session_state:
+                st.session_state[k] = [] if k == "f_per" else "" if ("b_" in k or "f_req" in k or "f_comp" in k) else "Todos"
+
+    st.button("♻️ Limpar Filtros", on_click=resetar_filtros_callback, use_container_width=True, key="btn_limpar_exclusivo")
+
 if not tem_filtro_ativo:
     st.info("💡 Selecione ou digite qualquer critério acima para carregar o painel.")
     st.stop()
@@ -73,14 +86,5 @@ if df_final.empty:
     st.warning("⚠️ Nenhum registro localizado para o período filtrado.")
     st.stop()
 
-col_btn_esquerda, col_btn_direita = st.columns(2)
-
-with col_btn_esquerda:
-    def resetar_filtros_callback():
-        for k in ["b_rm", "f_req", "f_comp", "f_st_rm", "f_st_pc", "f_per", "b_pc"]:
-            if k in st.session_state:
-                st.session_state[k] = [] if k == "f_per" else "" if ("b_" in k or "f_req" in k or "f_comp" in k) else "Todos"
-
-    st.button("♻️ Limpar Filtros", on_click=resetar_filtros_callback, use_container_width=True, key="btn_limpar_exclusivo")
-
+# Renderiza o botão de exportar na coluna da direita que está fixada no topo
 renderizar_grid_multiindex_colorido(df_final, lista_ent, lista_nec, col_btn_direita)
