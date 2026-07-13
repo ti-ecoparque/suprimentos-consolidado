@@ -42,21 +42,21 @@ st.markdown("#### 🔍 Painel de Filtros Globais")
 # ==========================================================
 col_esquerda, col_centro, col_direita = st.columns(3)
 
-# 📐 COLUNA DA ESQUERDA
+# 📐 COLUNA DA ESQUERDA (DATA, REQUISITANTE E STATUS RM)
 with col_esquerda:
-    filtro_status_pc = st.selectbox("Status do PC:", ["Todos", "Aprovado", "Em Aprovação", "Reprovado"], key="f_st_pc")
+    filtro_periodo = st.date_input("Intervalo (Data da Requisição):", value=[], format="DD/MM/YYYY", key="f_per")
     filtro_req = st.selectbox("Filtrar por Nome do Requisitante:", opcoes_requisitas, key="f_req")
-    filtro_comp = st.selectbox("Filtrar por Nome do Comprador:", opcoes_compradores, key="f_comp")
+    filtro_status_rm = st.selectbox("Status da RM:", ["Todos", "Aprovado", "Em Aprovação", "Reprovado"], key="f_st_rm")
 
-# 📐 COLUNA DO CENTRO
+# 📐 COLUNA DO CENTRO (NÚMEROS DIGITADOS)
 with col_centro:
     buscar_rm = st.text_input("Filtrar por Número da RM:", key="b_rm").strip()
     buscar_pc = st.text_input("Filtrar por Número do Pedido de Compra (Nr. PC):", key="b_pc").strip()
 
-# 📐 COLUNA DA DIREITA
+# 📐 COLUNA DA DIREITA (STATUS PC E COMPRADOR)
 with col_direita:
-    filtro_status_rm = st.selectbox("Status da RM:", ["Todos", "Aprovado", "Em Aprovação", "Reprovado"], key="f_st_rm")
-    filtro_periodo = st.date_input("Intervalo (Data da Requisição):", value=[], format="DD/MM/YYYY", key="f_per")
+    filtro_status_pc = st.selectbox("Status do PC:", ["Todos", "Aprovado", "Em Aprovação", "Reprovado"], key="f_st_pc")
+    filtro_comp = st.selectbox("Filtrar por Nome do Comprador:", opcoes_compradores, key="f_comp")
 
 st.write("") 
 
