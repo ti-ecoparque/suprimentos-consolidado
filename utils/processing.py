@@ -8,7 +8,6 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     if df_rm_bruto.empty: df_rm_bruto = pd.DataFrame(columns=cols_exclusivas_rm)
     if df_pc_bruto.empty: df_pc_bruto = pd.DataFrame(columns=cols_exclusivas_pc)
 
-    # 1. Limpeza e isolamento estrito da tabela de RMs
     df_rm_limpo = pd.DataFrame(index=df_rm_bruto.index)
     for c in df_rm_bruto.columns:
         if c in cols_exclusivas_rm:
@@ -18,7 +17,6 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     df_rm_limpo["mat_str"] = df_rm_limpo.get("mat", "---")
     df_rm_limpo = df_rm_limpo.drop_duplicates().copy()
 
-    # 2. Limpeza e isolamento estrito da tabela de Vínculos
     if not df_vinculo.empty:
         df_vinculo_limpo = pd.DataFrame(index=df_vinculo.index)
         for c in ["rm", "pedido"]:
@@ -32,7 +30,6 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
         df_rm_consolidada = df_rm_limpo.copy()
         df_rm_consolidada["pedido_str"] = "---"
 
-    # 3. Limpeza e isolamento estrito da tabela de Pedidos (PC)
     df_pc_limpo = pd.DataFrame(index=df_pc_bruto.index)
     if not df_pc_bruto.empty:
         df_pc_bruto["pedido_str"] = df_pc_bruto.get("pedido", "---")
@@ -47,7 +44,6 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     df_pc_limpo.rename(columns={"mat":"mat", "nome_solicitante":"comprador", "status_documento":"status_pc", "data_oficial_ocorrencia":"data_ocorrencia_pc", "data_ocorrencia":"data_ocorrencia_pc", "nome_aprovador":"nome_aprovador_pc", "quantidade":"quantidade_comprada"}, inplace=True, errors="ignore")
     df_pc_limpo = df_pc_limpo.drop_duplicates().copy()
 
-    # 🔥 MERGE SUPREMO RESTAURADO: Junção por Material e Pedido para resgatar os compradores originais (Thais/Junior)
     df_final = pd.merge(df_rm_consolidada, df_pc_limpo, on=["mat_str"], how="outer")
 
     if "pedido_str_y" in df_final.columns:
@@ -64,11 +60,17 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     df_final["rm"] = s_final_rm.fillna(df_final.get("rm_str", "---")).astype(str).str.strip()
     df_final["mat"] = s_final_mat.fillna(df_final.get("mat_str", "---")).astype(str).str.strip()
 
+    # Trava de rebatizamento do item específico para RM 2972
+    for idx_f in df_final.index:
+        p_final = str(df_final.loc[idx_f, "pedido_str"]).replace('.0', '').strip()
+        if p_final == "2876":
+            df_final.loc[idx_f, "rm"] = "2972"
+            df_final.loc[idx_f, "rm_str"] = "2972"
+
     df_final["pedido_str"] = df_final["pedido_str"].fillna("---").astype(str).str.strip()
     df_final["nome_solicitante"] = df_final["nome_solicitante"].fillna("---").astype(str).str.strip()
     df_final["comprador"] = df_final["comprador"].fillna("---").astype(str).str.strip()
 
-    # Filtros em memória RAM rápidos e responsivos
     if buscar_rm:
         df_final = df_final[df_final["rm"].str.contains(str(buscar_rm).strip(), na=False, regex=False)]
     if filtro_req != "Todos":
@@ -84,11 +86,13 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     df_final["rm_mat_seq_key"] = df_final["rm"].astype(str) + "_" + df_final["mat"].astype(str) + "_" + df_final["seq_item"]
     df_final = df_final.drop_duplicates(subset=["rm_mat_seq_key"]).copy()
 
-    # Cálculo de Datas Nativo Seguro e Inalterado
+    # Cálculo de Datas Nativo Corrigido
     lista_alertas_data, lista_entrega_dt_bruta, lista_necessidade_dt_bruta, indices_para_manter = [], [], [], []
     ignorar_calendario = (buscar_rm != "") or (buscar_pc != "")
-    data_inicio_filtro = filtro_periodo if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2 else None
-    data_fim_filtro = filtro_periodo if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2 else None
+    
+    # 🌟 CORREÇÃO DO FILTRO DE DATA: Coleta os índices [0] e [1] de dentro da lista do st.date_input
+    data_inicio_filtro = filtro_periodo[0] if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2 else None
+    data_fim_filtro = filtro_periodo[1] if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2 else None
 
     for idx in df_final.index:
         val_entrega = df_final.loc[idx, "entrega"]
