@@ -36,6 +36,16 @@ except Exception: pass
 
 st.markdown("#### 🔍 Painel de Filtros Globais")
 
+# 🌟 VALIDAÇÃO VIA CALLBACK: Função segura que roda antes do Streamlit desenhar a tela
+def resetar_filtros_callback():
+    for k in ["b_rm", "f_req", "f_comp", "f_st_rm", "f_st_pc", "f_per", "b_pc"]:
+        if k in st.session_state:
+            # Retorna cada componente visual para o seu tipo padrão de forma nativa
+            st.session_state[k] = [] if k == "f_per" else "" if "b_" in k else "Todos"
+
+# Botão Limpar aciona o Callback de forma blindada
+st.button("♻️ Limpar Filtros", on_click=resetar_filtros_callback, use_container_width=True)
+
 # ==========================================================
 # 🧱 GRID DE FILTROS ORGANIZADOS
 # ==========================================================
@@ -59,17 +69,6 @@ with col_f6:
 filtro_status_pc = st.selectbox("Status do PC:", ["Todos", "Aprovado", "Em Aprovação", "Reprovado"], key="f_st_pc")
 
 st.write("") 
-
-# ==========================================================
-# ♻️ CRIA CONTAINER DE BOTÕES LADO A LADO ANTES DA CONSULTA
-# ==========================================================
-col_btn_limpar, col_btn_exportar = st.columns(2)
-
-with col_btn_limpar:
-    if st.button("♻️ Limpar Filtros", use_container_width=True):
-        for k in ["b_rm", "f_req", "f_comp", "f_st_rm", "f_st_pc", "f_per", "b_pc"]:
-            if k in st.session_state: st.session_state[k] = [] if k == "f_per" else "" if "b_" in k else "Todos"
-        st.rerun()
 
 # HIGIENIZAÇÃO DE VARIÁVEIS NATIVAS
 if not filtro_req: filtro_req = "Todos"
@@ -95,5 +94,5 @@ if df_final.empty:
     st.warning("⚠️ Nenhum registro localizado para o período filtrado.")
     st.stop()
 
-# 🔥 CHAMADA DO MÓDULO EXECUTIVO PASSANDO O CONTAINER DO BOTÃO SUPERIOR
-renderizar_grid_multiindex_colorido(df_final, lista_ent, lista_nec, col_btn_exportar)
+# Chamada da renderização colorida em tela cheia abaixo dos filtros
+renderizar_grid_multiindex_colorido(df_final, lista_ent, lista_nec, st)
