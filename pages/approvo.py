@@ -36,14 +36,12 @@ except Exception: pass
 
 st.markdown("#### 🔍 Painel de Filtros Globais")
 
-# 🌟 VALIDAÇÃO VIA CALLBACK: Função segura que roda antes do Streamlit desenhar a tela
+# ♻️ Função segura de reset nativo via Session State
 def resetar_filtros_callback():
     for k in ["b_rm", "f_req", "f_comp", "f_st_rm", "f_st_pc", "f_per", "b_pc"]:
         if k in st.session_state:
-            # Retorna cada componente visual para o seu tipo padrão de forma nativa
             st.session_state[k] = [] if k == "f_per" else "" if "b_" in k else "Todos"
 
-# Botão Limpar aciona o Callback de forma blindada
 st.button("♻️ Limpar Filtros", on_click=resetar_filtros_callback, use_container_width=True)
 
 # ==========================================================
@@ -70,7 +68,6 @@ filtro_status_pc = st.selectbox("Status do PC:", ["Todos", "Aprovado", "Em Aprov
 
 st.write("") 
 
-# HIGIENIZAÇÃO DE VARIÁVEIS NATIVAS
 if not filtro_req: filtro_req = "Todos"
 if not filtro_comp: filtro_comp = "Todos"
 if not filtro_status_rm: filtro_status_rm = "Todos"
@@ -94,5 +91,5 @@ if df_final.empty:
     st.warning("⚠️ Nenhum registro localizado para o período filtrado.")
     st.stop()
 
-# Chamada da renderização colorida em tela cheia abaixo dos filtros
-renderizar_grid_multiindex_colorido(df_final, lista_ent, lista_nec, st)
+# 🚨 CORREÇÃO DA ASSINATURA: Removemos a variável 'st' duplicada para bater com as 3 chaves do subarquivo
+renderizar_grid_multiindex_colorido(df_final, lista_ent, lista_nec)

@@ -3,7 +3,7 @@ import streamlit as st
 import datetime
 import io
 
-def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_necessidade_dt_bruta, container_botao):
+def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_necessidade_dt_bruta):
     if "status_documento" in df_final.columns:
         df_final["status_documento"] = df_final["status_documento"].map(lambda x: {"A":"Aprovado","E":"Em Aprovação","R":"Reprovado"}.get(str(x).strip().upper(), "---") if pd.notna(x) else "---")
     if "status_pc" in df_final.columns:
@@ -49,17 +49,14 @@ def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_
         df_excel.to_excel(writer, index=False, sheet_name='Approvo Status')
     dados_excel = output.getvalue()
 
-    # 🚨 O BOTÃO SE ENCAIXA NA COLUNA DA DIREITA LÁ DE CIMA PERFEITAMENTE
-    with container_botao:
-        st.download_button(
-            label="📥 Exportar Painel para o Excel (.xlsx)",
-            data=dados_excel,
-            file_name=f"approvo_status_{datetime.date.today().strftime('%Y%m%d')}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
-        )
-
-    st.write("") # Quebra de linha isolando a barra de botões da tabela
+    st.download_button(
+        label="📥 Exportar Painel para o Excel (.xlsx)",
+        data=dados_excel,
+        file_name=f"approvo_status_{datetime.date.today().strftime('%Y%m%d')}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True
+    )
+    st.divider()
 
     def aplicar_cores_corpo(df):
         estilos = pd.DataFrame('', index=df.index, columns=df.columns)
@@ -80,7 +77,6 @@ def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_
                     if dias_diff > 0: esta_atrasado = True
                     elif dias_diff < 0: esta_adiantado = True
 
-                # Coluna 18: Alerta de Entrega
                 if idx_coluna == 18:
                     if "DATA NÃO INFORMADA" in texto_celula.upper():
                         estilos.at[i, col] = 'background-color: #fff2cc; color: #7f6000; text-align: center; font-weight: bold;'
@@ -90,8 +86,6 @@ def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_
                         estilos.at[i, col] = 'background-color: #e6f2ff; color: #1f4e78; font-weight: bold; text-align: center;'
                     else:
                         estilos.at[i, col] = 'background-color: #e2f0d9; color: #375623; text-align: center; font-weight: bold;'
-                
-                # Mapeamento estrito por posições numéricas
                 else:
                     if 0 <= idx_coluna <= 6:
                         estilos.at[i, col] = 'background-color: #f2f7f2; color: #000000;'
@@ -121,5 +115,4 @@ def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_
     """, unsafe_allow_html=True)
 
     df_estilizado = df_exibicao.style.apply(aplicar_cores_corpo, axis=None)
-    # 🔥 LARGURA TOTAL: Força o componente a renderizar em 100% da tela abaixo dos botões
     st.dataframe(df_estilizado, use_container_width=True, hide_index=True)
