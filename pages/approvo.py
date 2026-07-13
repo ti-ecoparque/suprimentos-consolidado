@@ -29,26 +29,20 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 opcoes_requisitas = ["Todos"]
 opcoes_compradores = ["Todos"]
 try:
-    # 🌟 1. COLETA COMPLETA DE REQUISITANTES (Mata o problema da Karolina Santos e da Marinez!)
-    # Varre a vw_approvo_rm para pegar os requisitantes originais
+    # 🌟 1. REQUISITANTES PUROS: Buscamos NOMES apenas na visão de RMs (vw_approvo_rm)
     res_nomes_req = supabase.table("vw_approvo_rm").select("nome_solicitante").execute()
     
-    # Busca também na vw_approvo_pc para pegar quem abriu processos de compras (Marinez Frizon)
-    res_nomes_req_pc = supabase.table("vw_approvo_pc").select("nome_solicitante").execute()
-    
     nomes_tratados_req = []
-    # Junta os nomes de solicitantes de ambas as visões do banco
-    for lista_dados in [res_nomes_req.data, res_nomes_req_pc.data]:
-        for registro in lista_dados:
-            nome_cru = registro.get("nome_solicitante")
-            if nome_cru and str(nome_cru).strip() not in ["", "nan", "None", "---"]:
-                nomes_tratados_req.append(str(nome_cru).strip().title()) # .title() padroniza Karolina Santos bonita
+    for registro in res_nomes_req.data:
+        nome_cru = registro.get("nome_solicitante")
+        if nome_cru and str(nome_cru).strip() not in ["", "nan", "None", "---"]:
+            # .title() padroniza os nomes visualmente de forma elegante
+            nomes_tratados_req.append(str(nome_cru).strip().title())
                 
-    # Remove repetições e organiza de A a Z de forma impecável
+    # Remove duplicados e organiza em ordem alfabética de A a Z
     opcoes_requisitas = ["Todos"] + sorted(list(set(nomes_tratados_req)))
 
-    # 🌟 2. COLETA COMPLETA DE COMPRADORES (Mata o problema do Junior e da Thais!)
-    # Mapeado diretamente na coluna 'nome_aprovador' da sua visão de compras conforme o print do banco
+    # 🌟 2. COMPRADORES PUROS: Buscamos NOMES apenas na coluna 'nome_aprovador' de compras (vw_approvo_pc)
     res_nomes_comp = supabase.table("vw_approvo_pc").select("nome_aprovador").execute()
     
     nomes_tratados_comp = []
@@ -57,10 +51,11 @@ try:
         if comp_cru and str(comp_cru).strip() not in ["", "nan", "None", "---"]:
             nomes_tratados_comp.append(str(comp_cru).strip().title())
             
+    # Remove duplicados e organiza os compradores de A a Z
     opcoes_compradores = ["Todos"] + sorted(list(set(nomes_tratados_comp)))
 
 except Exception as e:
-    # Mantém a segurança do painel ativa em caso de oscilação de rede
+    # Mantém os seletores seguros com "Todos" em caso de qualquer oscilação de rede
     pass
 
 st.markdown("#### 🔍 Painel de Filtros Globais")
