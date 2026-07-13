@@ -48,16 +48,8 @@ with col_direita:
 
 st.write("") 
 
-# Higienização segura de inputs textuais
-if not filtro_req or str(filtro_req).strip() == "": filtro_req = "Todos"
-if not filtro_comp or str(filtro_comp).strip() == "": filtro_comp = "Todos"
-if not filtro_status_rm: filtro_status_rm = "Todos"
-if not filtro_status_pc: filtro_status_pc = "Todos"
-
-tem_filtro_ativo = buscar_rm or buscar_pc or filtro_req != "Todos" or filtro_comp != "Todos" or filtro_status_rm != "Todos" or filtro_status_pc != "Todos" or (isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2)
-
 # ==========================================================
-# 🚨 CONTAINER DE BOTÕES FIXADO NO TOPO (MUDADO PARA CIMA!)
+# 🚨 CONTAINER DE BOTÕES FIXADO NO TOPO
 # ==========================================================
 col_btn_esquerda, col_btn_direita = st.columns(2)
 
@@ -69,6 +61,13 @@ with col_btn_esquerda:
 
     st.button("♻️ Limpar Filtros", on_click=resetar_filtros_callback, use_container_width=True, key="btn_limpar_exclusivo")
 
+# Higienização segura de inputs textuais
+if not filtro_req or str(filtro_req).strip() == "": filtro_req = "Todos"
+if not filtro_comp or str(filtro_comp).strip() == "": filtro_comp = "Todos"
+if not filtro_status_rm: filtro_status_rm = "Todos"
+if not filtro_status_pc: filtro_status_pc = "Todos"
+
+tem_filtro_ativo = buscar_rm or buscar_pc or filtro_req != "Todos" or filtro_comp != "Todos" or filtro_status_rm != "Todos" or filtro_status_pc != "Todos" or (isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2)
 if not tem_filtro_ativo:
     st.info("💡 Selecione ou digite qualquer critério acima para carregar o painel.")
     st.stop()
@@ -80,11 +79,12 @@ if df_rm.empty and df_pc.empty:
     st.warning("⚠️ Nenhum registro correspondente aos critérios foi localizado no banco de dados.")
     st.stop()
 
+# 🌟 CONEXÃO PERFEITA DE CHAVES: Variáveis enviadas na ordem exata que a função espera receber!
 df_final, lista_ent, lista_nec = processar_e_unificar_dados(df_rm, df_pc, df_vinculo, buscar_rm, buscar_pc, filtro_req, filtro_comp, filtro_status_pc, filtro_periodo)
 
 if df_final.empty:
     st.warning("⚠️ Nenhum registro localizado para o período filtrado.")
     st.stop()
 
-# Renderiza o botão de exportar na coluna da direita que está fixada no topo
+# Renderiza o botão de exportar na coluna da direita e o grid abaixo
 renderizar_grid_multiindex_colorido(df_final, lista_ent, lista_nec, col_btn_direita)
