@@ -22,7 +22,7 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
                 res_pc = supabase.table("vw_approvo_pc").select("*").in_("pedido", lista_peds_pontes).limit(500).execute()
                 df_pc_bruto = pd.DataFrame(res_pc.data)
 
-    # Rota B: Busca isolada por número de PC
+    # Rota B: Busca isolada por número do PC
     elif buscar_pc and str(buscar_pc).strip() != "":
         pc_alvo = str(buscar_pc).strip()
         query_pc = supabase.table("vw_approvo_pc").select("*").eq("pedido", pc_alvo)
@@ -37,33 +37,34 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
             res_rm = supabase.table("vw_approvo_rm").select("*").in_("rm", lista_rms_pontes).execute()
             df_rm_bruto = pd.DataFrame(res_rm.data)
 
-    # Rota C: Rota de filtros por nome/status (Sincronizada com o fluxo de hoje de manhã!)
+    # Rota C: Rota de filtros por digitação rápida
     else:
         query_rm = supabase.table("vw_approvo_rm").select("*")
-        if filtro_req != "Todos": 
-            query_rm = query_rm.eq("nome_solicitante", filtro_req)
+        
+        # 🌟 O SEGREDO DO ILIKE: Busca o nome contido ignorando maiúsculas, minúsculas ou prefixos!
+        if filtro_req != "Todos" and str(filtro_req).strip() != "":
+            query_rm = query_rm.ilike("nome_solicitante", f"%{str(filtro_req).strip()}%")
+            
         if filtro_status_rm != "Todos":
             query_rm = query_rm.eq("status_documento", {"Aprovado":"A","Em Aprovação":"E","Reprovado":"R"}[filtro_status_rm])
         res_rm = query_rm.limit(500).execute()
         df_rm_bruto = pd.DataFrame(res_rm.data)
 
-        # Resgata os vínculos intermediários de chaves
         query_vinculo = supabase.table("pedido_compra").select("rm", "pedido").limit(2000)
         res_vinculo = query_vinculo.execute()
         df_vinculo = pd.DataFrame(res_vinculo.data)
 
-        # 🔥 A MÁGICA DE HOJE DE MANHÃ: Se buscou por Requisitante, traz um lote completo e global
-        # de compras do banco para o Pandas cruzar via RAM, restaurando Thais e Junior na hora!
         query_pc = supabase.table("vw_approvo_pc").select("*")
         if filtro_comp != "Todos": 
             query_pc = query_pc.eq("nome_aprovador", filtro_comp)
+            
         if filtro_status_pc != "Todos": 
             query_pc = query_pc.eq("status_documento", {"Aprovado":"A","Em Aprovação":"E","Reprovado":"R"}[filtro_status_pc])
             
         res_pc = query_pc.limit(1500).execute()
         df_pc_bruto = pd.DataFrame(res_pc.data)
 
-    # Injeção das chaves técnicas de strings que o processamento utiliza para o Outer Join
+    # Injeção estável das chaves de strings técnicas para o processamento
     if not df_rm_bruto.empty and "rm" in df_rm_bruto.columns:
         df_rm_bruto["rm_str"] = df_rm_bruto["rm"].astype(str).str.replace('.0', '', regex=False).str.strip()
         df_rm_bruto["mat_str"] = df_rm_bruto["mat"].astype(str).str.replace('.0', '', regex=False).str.strip()

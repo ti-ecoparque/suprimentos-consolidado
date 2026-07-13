@@ -26,71 +26,45 @@ SUPABASE_URL = os.getenv("SUPABASE_URL") or st.secrets.get("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY") or st.secrets.get("SUPABASE_KEY")
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-opcoes_requisitas = ["Todos"]
+# Lista simples estática para os status padrão comerciais
 opcoes_compradores = ["Todos"]
 try:
-    # 🌟 CAPTURA ROBUSTA DA TABELA FÍSICA ORIGINAL
-    res_nomes_req = supabase.table("rel_solicitacao_compras").select("usuario_solicitante").execute()
-    
-    nomes_tratados_req = []
-    if res_nomes_req.data:
-        for registro in res_nomes_req.data:
-            nome_cru = registro.get("usuario_solicitante")
-            if nome_cru and str(nome_cru).strip() not in ["", "nan", "None", "---"]:
-                # Remove o prefixo textual 705. de forma limpa e direta
-                nome_limpo = str(nome_cru).replace("705.", "").strip()
-                nomes_tratados_req.append(nome_limpo.title())
-                
-    opcoes_requisitas = ["Todos"] + sorted(list(set(nomes_tratados_req)))
-
-    # Captura de compradores estáveis
     res_nomes_comp = supabase.table("vw_approvo_pc").select("nome_aprovador").execute()
-    nomes_tratados_comp = []
-    if res_nomes_comp.data:
-        for registro in res_nomes_comp.data:
-            comp_cru = registro.get("nome_aprovador")
-            if comp_cru and str(comp_cru).strip() not in ["", "nan", "None", "---"]:
-                comp_limpo = str(comp_cru).replace("705.", "").strip()
-                nomes_tratados_comp.append(comp_limpo.title())
-            
-    opcoes_compradores = ["Todos"] + sorted(list(set(nomes_tratados_comp)))
-
-except Exception as e:
-    pass
+    opcoes_compradores = ["Todos"] + sorted(list(set([str(l.get("nome_aprovador")).replace("705.", "").strip().title() for l in res_nomes_comp.data if l.get("nome_aprovador")])))
+except Exception: pass
 
 st.markdown("#### 🔍 Painel de Filtros Globais")
 
 # ==========================================================
-# 🧱 GRID DE FILTROS REORGANIZADOS (3 COLUNAS VERTICAIS)
+# 🧱 GRID DE FILTROS REORGANIZADOS (DIGITAÇÃO INTELIGENTE ACTIVED)
 # ==========================================================
 col_esquerda, col_centro, col_direita = st.columns(3)
 
-# 📐 COLUNA DA ESQUERDA (DATA, REQUISITANTE E STATUS RM)
 with col_esquerda:
     filtro_periodo = st.date_input("Intervalo (Data da Requisição):", value=[], format="DD/MM/YYYY", key="f_per")
-    filtro_req = st.selectbox("Filtrar por Nome do Requisitante:", opcoes_requisitas, key="f_req")
+    # 🌟 A MUDANÇA SUPREMA: Transforma a caixa suspensa em digitação livre por texto
+    filtro_req = st.text_input("Filtrar por Nome do Requisitante (Ex: Edinelson, Karolina):", key="f_req").strip()
     filtro_status_rm = st.selectbox("Status da RM:", ["Todos", "Aprovado", "Em Aprovação", "Reprovado"], key="f_st_rm")
 
-# 📐 COLUNA DO CENTRO (NÚMEROS DIGITADOS)
 with col_centro:
     buscar_rm = st.text_input("Filtrar por Número da RM:", key="b_rm").strip()
     buscar_pc = st.text_input("Filtrar por Número do Pedido de Compra (Nr. PC):", key="b_pc").strip()
 
-# 📐 COLUNA DA DIREITA (STATUS PC E COMPRADOR)
 with col_direita:
     filtro_status_pc = st.selectbox("Status do PC:", ["Todos", "Aprovado", "Em Aprovação", "Reprovado"], key="f_st_pc")
     filtro_comp = st.selectbox("Filtrar por Nome do Comprador:", opcoes_compradores, key="f_comp")
 
 st.write("") 
 
-if not filtro_req: filtro_req = "Todos"
+# Higienização segura de strings vazias
+if not filtro_req or str(filtro_req).strip() == "": filtro_req = "Todos"
 if not filtro_comp: filtro_comp = "Todos"
 if not filtro_status_rm: filtro_status_rm = "Todos"
 if not filtro_status_pc: filtro_status_pc = "Todos"
 
 tem_filtro_ativo = buscar_rm or buscar_pc or filtro_req != "Todos" or filtro_comp != "Todos" or filtro_status_rm != "Todos" or filtro_status_pc != "Todos" or (isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2)
 if not tem_filtro_ativo:
-    st.info("💡 Selecione qualquer filtro acima para carregar o painel consolidado.")
+    st.info("💡 Selecione ou digite qualquer critério acima para carregar o painel.")
     st.stop()
 
 with st.spinner("Processando árvore de suprimentos..."):
@@ -106,16 +80,13 @@ if df_final.empty:
     st.warning("⚠️ Nenhum registro localizado para o período filtrado.")
     st.stop()
 
-# ==========================================================
-# 🚨 RETRANCA DE LAYOUT: BOTÕES UNIFICADOS LADO A LADO
-# ==========================================================
 col_btn_esquerda, col_btn_direita = st.columns(2)
 
 with col_btn_esquerda:
     def resetar_filtros_callback():
         for k in ["b_rm", "f_req", "f_comp", "f_st_rm", "f_st_pc", "f_per", "b_pc"]:
             if k in st.session_state:
-                st.session_state[k] = [] if k == "f_per" else "" if "b_" in k else "Todos"
+                st.session_state[k] = [] if k == "f_per" else "" if "b_" in k or "f_req" in k else "Todos"
 
     st.button("♻️ Limpar Filtros", on_click=resetar_filtros_callback, use_container_width=True, key="btn_limpar_exclusivo")
 
