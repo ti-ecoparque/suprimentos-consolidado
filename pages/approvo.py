@@ -29,7 +29,7 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 opcoes_requisitas = ["Todos"]
 opcoes_compradores = ["Todos"]
 try:
-    # 🌟 1. CAPTURA DE REQUISITANTES DA TABELA FÍSICA
+    # 🌟 CAPTURA ROBUSTA DA TABELA FÍSICA ORIGINAL
     res_nomes_req = supabase.table("rel_solicitacao_compras").select("usuario_solicitante").execute()
     
     nomes_tratados_req = []
@@ -37,40 +37,25 @@ try:
         for registro in res_nomes_req.data:
             nome_cru = registro.get("usuario_solicitante")
             if nome_cru and str(nome_cru).strip() not in ["", "nan", "None", "---"]:
-                nome_limpo = str(nome_cru).strip()
-                
-                # ✂️ ENGENHARIA DE TEXTO SEGURA: Fatia no ponto e captura o índice 1 (o nome real sem o 705)
-                if "." in nome_limpo:
-                    partes = nome_limpo.split(".", 1)
-                    if len(partes) > 1:
-                        nome_limpo = partes[1].strip() # Captura o nome de forma individual e limpa
-                
-                # Formata com iniciais maiúsculas limpas (Ex: Edinelson Vieira / Karolina Santos)
+                # Remove o prefixo textual 705. de forma limpa e direta
+                nome_limpo = str(nome_cru).replace("705.", "").strip()
                 nomes_tratados_req.append(nome_limpo.title())
                 
-    # O set() elimina duplicidades e ordena alfabeticamente de A a Z na memória RAM
     opcoes_requisitas = ["Todos"] + sorted(list(set(nomes_tratados_req)))
 
-    # 🌟 2. CAPTURA DE COMPRADORES DA VISÃO DE COMPRAS
+    # Captura de compradores estáveis
     res_nomes_comp = supabase.table("vw_approvo_pc").select("nome_aprovador").execute()
     nomes_tratados_comp = []
     if res_nomes_comp.data:
         for registro in res_nomes_comp.data:
             comp_cru = registro.get("nome_aprovador")
             if comp_cru and str(comp_cru).strip() not in ["", "nan", "None", "---"]:
-                comp_limpo = str(comp_cru).strip()
-                
-                if "." in comp_limpo:
-                    partes = comp_limpo.split(".", 1)
-                    if len(partes) > 1:
-                        comp_limpo = partes[1].strip()
-                    
+                comp_limpo = str(comp_cru).replace("705.", "").strip()
                 nomes_tratados_comp.append(comp_limpo.title())
             
     opcoes_compradores = ["Todos"] + sorted(list(set(nomes_tratados_comp)))
 
 except Exception as e:
-    # Mantém os seletores seguros com "Todos" em caso de oscilação do banco
     pass
 
 st.markdown("#### 🔍 Painel de Filtros Globais")

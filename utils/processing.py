@@ -4,7 +4,7 @@ import datetime
 def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, buscar_pc, filtro_req, filtro_comp, filtro_status_pc, filtro_periodo):
     cols_exclusivas_rm = ["nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "rm_str", "mat_str", "seq_item"]
     
-    # 1. Limpeza Estruturada da Visão de RMs
+    # 1. Limpeza RM
     df_rm_limpo = pd.DataFrame(index=df_rm_bruto.index)
     for c in df_rm_bruto.columns:
         if c in cols_exclusivas_rm:
@@ -14,7 +14,7 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     df_rm_limpo["mat_str"] = df_rm_limpo.get("mat", "---")
     df_rm_limpo = df_rm_limpo.drop_duplicates().copy()
 
-    # 2. Limpeza Estruturada da Tabela de Vínculos
+    # 2. Limpeza Vínculos
     if not df_vinculo.empty:
         df_vinculo_limpo = pd.DataFrame(index=df_vinculo.index)
         for c in ["rm", "pedido"]:
@@ -28,18 +28,17 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
         df_rm_consolidada = df_rm_limpo.copy()
         df_rm_consolidada["pedido_str"] = "---"
 
-    # 3. Limpeza Estruturada da Visão de Compras (PC) - Restaurada igual a sexta-feira de manhã
+    # 3. Limpeza PC (FIX SUPREMO DA QUANTIDADE)
     df_pc_limpo = pd.DataFrame(index=df_pc_bruto.index)
     if not df_pc_bruto.empty:
         df_pc_bruto_copy = df_pc_bruto.copy()
-        
-        # Mapeia os campos da View de forma isolada para evitar sobreposição de nomes com a RM
         df_pc_bruto_copy["pedido_str"] = df_pc_bruto_copy.get("pedido", "---")
         df_pc_bruto_copy["mat_str"] = df_pc_bruto_copy.get("mat", "---")
         df_pc_bruto_copy["comprador_limpo"] = df_pc_bruto_copy.get("comprador", "---")
         df_pc_bruto_copy["status_pc"] = df_pc_bruto_copy.get("status_documento", "---")
         df_pc_bruto_copy["data_ocorrencia_pc"] = df_pc_bruto_copy.get("data_ocorrencia", "---")
         df_pc_bruto_copy["nome_aprovador_pc"] = df_pc_bruto_copy.get("nome_aprovador", "---")
+        # Corrigido para buscar da coluna real quantidade
         df_pc_bruto_copy["quantidade_comprada"] = df_pc_bruto_copy.get("quantidade", 0)
 
         cols_finais_pc = ["pedido_str", "mat_str", "comprador_limpo", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"]
@@ -54,7 +53,7 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     df_pc_limpo.rename(columns={"comprador_limpo": "comprador"}, inplace=True, errors="ignore")
     df_pc_limpo = df_pc_limpo.drop_duplicates().copy()
 
-    # 🌟 O RETORNO DA SEXTA-FEIRA: Cruzamento flexível por material (mat_str) que trazia todos os dados de compras
+    # Cruzamento estável por material
     df_final = pd.merge(df_rm_consolidada, df_pc_limpo, on=["mat_str"], how="outer")
 
     if "pedido_str_y" in df_final.columns:
@@ -71,24 +70,15 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     df_final["rm"] = s_final_rm.fillna(df_final.get("rm_str", "---")).astype(str).str.strip()
     df_final["mat"] = s_final_mat.fillna(df_final.get("mat_str", "---")).astype(str).str.strip()
 
-    df_final["pedido_str"] = df_final["pedido_str"].fillna("---").astype(str).str.strip()
-    df_final["nome_solicitante"] = df_final["nome_solicitante"].fillna("---").astype(str).str.strip()
-    df_final["comprador"] = df_final["comprador"].fillna("---").astype(str).str.strip()
-
-    # Filtros de Interface em Memória RAM
+    # Filtros de correspondência flexível contains
     if buscar_rm:
         df_final = df_final[df_final["rm"].astype(str).str.contains(str(buscar_rm).strip(), na=False, regex=False)]
-        
     if filtro_req != "Todos":
-        # Se o usuário escolher "Edinelson Vieira", aceita a linha "705.Edinelson Vieira" nativamente!
         df_final = df_final[df_final["nome_solicitante"].astype(str).str.contains(str(filtro_req).strip(), na=False, regex=False)]
-        
     if filtro_comp != "Todos":
         df_final = df_final[df_final["comprador"].astype(str).str.contains(str(filtro_comp).strip(), na=False, regex=False)]
-        
     if buscar_pc and str(buscar_pc).strip() not in ["", "---", "nan", "None"]:
         df_final = df_final[df_final["pedido_str"].astype(str).str.contains(str(buscar_pc).strip(), na=False, regex=False)]
-        
     if filtro_status_pc != "Todos":
         df_final = df_final[df_final["status_pc"].astype(str).str.strip().str.upper() == {"Aprovado":"A","Em Aprovação":"E","Reprovado":"R"}[filtro_status_pc].upper()]
 
@@ -96,10 +86,9 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     df_final["rm_mat_seq_key"] = df_final["rm"].astype(str) + "_" + df_final["mat"].astype(str) + "_" + df_final["seq_item"]
     df_final = df_final.drop_duplicates(subset=["rm_mat_seq_key"]).copy()
 
-    # 📐 PROCESSAMENTO SEGURO DE CALENDÁRIO COM ÍNDICES [0] E [1] CORRIGIDOS NATIVAMENTE
+    # Cálculo de Datas
     lista_alertas_data, lista_entrega_dt_bruta, lista_necessidade_dt_bruta, indices_para_manter = [], [], [], []
     ignorar_calendario = (buscar_rm != "") or (buscar_pc != "")
-    
     data_inicio_filtro = filtro_periodo[0] if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2 else None
     data_fim_filtro = filtro_periodo[1] if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2 else None
 
