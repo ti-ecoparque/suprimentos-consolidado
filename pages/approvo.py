@@ -39,16 +39,16 @@ try:
             if nome_cru and str(nome_cru).strip() not in ["", "nan", "None", "---"]:
                 nome_limpo = str(nome_cru).strip()
                 
-                # ✂️ FIX DO SPLICING SECURE: Fatia o texto no ponto e captura estritamente o índice [1] (o nome real!)
+                # ✂️ ENGENHARIA DE TEXTO SEGURA: Fatia no ponto e captura o índice 1 (o nome real sem o 705)
                 if "." in nome_limpo:
                     partes = nome_limpo.split(".", 1)
                     if len(partes) > 1:
-                        nome_limpo = partes[1].strip() # Pega a segunda parte textual e limpa os espaços
+                        nome_limpo = partes[1].strip() # Captura o nome de forma individual e limpa
                 
-                # Garante iniciais maiúsculas elegantes (Ex: Edinelson Vieira)
+                # Formata com iniciais maiúsculas limpas (Ex: Edinelson Vieira / Karolina Santos)
                 nomes_tratados_req.append(nome_limpo.title())
                 
-    # O set() elimina duplicidades e ordena alfabeticamente de A a Z
+    # O set() elimina duplicidades e ordena alfabeticamente de A a Z na memória RAM
     opcoes_requisitas = ["Todos"] + sorted(list(set(nomes_tratados_req)))
 
     # 🌟 2. CAPTURA DE COMPRADORES DA VISÃO DE COMPRAS
@@ -70,7 +70,7 @@ try:
     opcoes_compradores = ["Todos"] + sorted(list(set(nomes_tratados_comp)))
 
 except Exception as e:
-    # Proteção de redundância: impede que a tela quebre se o banco oscilar
+    # Mantém os seletores seguros com "Todos" em caso de oscilação do banco
     pass
 
 st.markdown("#### 🔍 Painel de Filtros Globais")
