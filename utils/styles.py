@@ -3,7 +3,9 @@ import streamlit as st
 import datetime
 import io
 
-def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_necessidade_dt_bruta):
+# 🚨 ADICIONE O PARÂMETRO 'container_botao' NO FINAL DA ASSINATURA:
+def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_necessidade_dt_bruta, container_botao=None):
+    # (As limpezas e formatações de data continuam exatamente iguais abaixo...)
     if "status_documento" in df_final.columns:
         df_final["status_documento"] = df_final["status_documento"].map(lambda x: {"A":"Aprovado","E":"Em Aprovação","R":"Reprovado"}.get(str(x).strip().upper(), "---") if pd.notna(x) else "---")
     if "status_pc" in df_final.columns:
@@ -49,15 +51,27 @@ def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_
         df_excel.to_excel(writer, index=False, sheet_name='Approvo Status')
     dados_excel = output.getvalue()
 
-    st.download_button(
-        label="📥 Exportar Painel para o Excel (.xlsx)",
-        data=dados_excel,
-        file_name=f"approvo_status_{datetime.date.today().strftime('%Y%m%d')}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True
-    )
+    # 🚨 LOCALIZAR E ALTERAR ESTE BLOCO DO BOTAO PARA ENCAIXAR NA COLUNA DA DIREITA:
+    if container_botao is not None:
+        with container_botao:
+            st.download_button(
+                label="📥 Exportar Painel para o Excel (.xlsx)",
+                data=dados_excel,
+                file_name=f"approvo_status_{datetime.date.today().strftime('%Y%m%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+    else:
+        st.download_button(
+            label="📥 Exportar Painel para o Excel (.xlsx)",
+            data=dados_excel,
+            file_name=f"approvo_status_{datetime.date.today().strftime('%Y%m%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
     st.divider()
 
+    # (O restante da função aplicar_cores_corpo e st.dataframe continua exatamente igual abaixo...)
     def aplicar_cores_corpo(df):
         estilos = pd.DataFrame('', index=df.index, columns=df.columns)
         mapa_indices = {orig_idx: pos for pos, orig_idx in enumerate(df_final.index) if orig_idx in df.index}
@@ -65,7 +79,6 @@ def renderizar_grid_multiindex_colorido(df_final, lista_entrega_dt_bruta, lista_
 
         for col in df.columns:
             idx_coluna = lista_colunas_mapeadas.index(col)
-            
             for i in df.index:
                 pos_lista = mapa_indices.get(i)
                 texto_celula = str(df.at[i, col]).strip()
