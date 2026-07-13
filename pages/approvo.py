@@ -79,8 +79,18 @@ if df_rm.empty and df_pc.empty:
     st.warning("⚠️ Nenhum registro correspondente aos critérios foi localizado no banco de dados.")
     st.stop()
 
-# 🌟 CONEXÃO PERFEITA DE CHAVES: Variáveis enviadas na ordem exata que a função espera receber!
-df_final, lista_ent, lista_nec = processar_e_unificar_dados(df_rm, df_pc, df_vinculo, buscar_rm, buscar_pc, filtro_req, filtro_comp, filtro_status_pc, filtro_periodo)
+# 🌟 CONEXÃO MATEMÁTICA PERFEITA: Variáveis batendo exatamente com a ordem do seu processing.py!
+df_final, lista_ent, lista_nec = processar_e_unificar_dados(
+    df_rm, 
+    df_pc, 
+    df_vinculo, 
+    buscar_rm, 
+    buscar_pc, 
+    filtro_req, 
+    filtro_comp, 
+    filtro_status_pc, 
+    filtro_periodo
+)
 
 if df_final.empty:
     st.warning("⚠️ Nenhum registro localizado para o período filtrado.")
