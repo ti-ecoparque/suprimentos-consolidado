@@ -10,15 +10,12 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
         rm_alvo = str(buscar_rm).strip()
         rm_parametro = int(rm_alvo) if rm_alvo.isdigit() else rm_alvo
         
-        # 1. Busca direta na visão de RMs do Supabase
         res_rm = supabase.table("vw_approvo_rm").select("*").eq("rm", rm_parametro).limit(500).execute()
         df_rm_bruto = pd.DataFrame(res_rm.data)
         
-        # 🚨 PONTE INTELIGENTE: Tenta buscar o número exato na coluna RM
         res_vinculo = supabase.table("pedido_compra").select("rm", "pedido").eq("rm", int(rm_alvo) if rm_alvo.isdigit() else 0).execute()
         df_vinculo = pd.DataFrame(res_vinculo.data)
         
-        # 🌟 MULTI-MATCH: Se não achou na coluna RM, busca o texto contido na coluna observacao (Mata o problema do print!)
         if df_vinculo.empty:
             res_vinculo_obs = supabase.table("pedido_compra").select("rm", "pedido").ilike("observacao", f"%{rm_alvo}%").execute()
             df_vinculo = pd.DataFrame(res_vinculo_obs.data)
@@ -46,29 +43,56 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
 
     # C. Fluxo de Filtros de Combinação Padrão
     else:
+        # 🚨 BUSCA BIDIRECIONAL DE NOMES: Se filtrar por Requisitante, o sistema puxa as RMs dele
+        # mas também deixa a query aberta para buscar pedidos vinculados onde ele apareça como comprador/solicitante
         query_rm = supabase.table("vw_approvo_rm").select("*")
-        if filtro_req != "Todos": query_rm = query_rm.eq("nome_solicitante", filtro_req)
+        if filtro_req != "Todos": 
+            query_rm = query_rm.eq("nome_solicitante", filtro_req)
         if filtro_status_rm != "Todos":
             query_rm = query_rm.eq("status_documento", {"Aprovado":"A","Em Aprovação":"E","Reprovado":"R"}[filtro_status_rm])
         res_rm = query_rm.limit(500).execute()
         df_rm_bruto = pd.DataFrame(res_rm.data)
 
-        lista_rms_encontradas = [int(float(x)) for x in df_rm_bruto["rm"].unique() if pd.notna(x)] if "rm" in df_rm_bruto.columns else []
+        # Busca reversa: Localiza as pontes de amarrações no banco
         query_vinculo = supabase.table("pedido_compra").select("rm", "pedido")
-        if lista_rms_encontradas: query_vinculo = query_vinculo.in_("rm", lista_rms_encontradas)
-        res_vinculo = query_vinculo.execute()
-        df_vinculo = pd.DataFrame(res_vinculo.data)
+        
+        # 🌟 COMPLEMENTO DE CORES DE HISTÓRICO: Se a busca por nome trouxe pouca coisa,
+        # puxa a lista completa de amarrações para cruzar com a tabela de PCs abaixo
+        res_vinculo_global = supabase.table("pedido_compra").select("rm", "pedido").limit(1000).execute()
+        df_vinculo = pd.DataFrame(res_vinculo_global.data)
 
         lista_peds_vinculados = [str(int(float(x))) for x in df_vinculo["pedido"].unique() if pd.notna(x)] if "pedido" in df_vinculo.columns else []
-        deve_buscar_pc = filtro_comp != "Todos" or filtro_status_pc != "Todos" or len(lista_peds_vinculados) > 0
+        deve_buscar_pc = filtro_comp != "Todos" or filtro_status_pc != "Todos" or len(lista_peds_vinculados) > 0 or filtro_req != "Todos"
 
         if deve_buscar_pc:
             query_pc = supabase.table("vw_approvo_pc").select("*")
-            if filtro_comp != "Todos": query_pc = query_pc.eq("nome_solicitante", filtro_comp)
-            if filtro_status_pc != "Todos": query_pc = query_pc.eq("status_documento", {"Aprovado":"A","Em Aprovação":"E","Reprovado":"R"}[filtro_status_pc])
-            elif lista_peds_vinculados: query_pc = query_pc.in_("pedido", lista_peds_vinculados)
+            
+            # Se filtrou por requisitante, cruza com o PC para ver se o nome bate em qualquer uma das pontas comerciais
+            if filtro_req != "Todos" and filtro_comp == "Todos":
+                # Adiciona suporte para carregar o PC se o Edinelson estiver envolvido na compra
+                query_pc = query_pc.or_(f"nome_solicitante.eq.{filtro_req}")
+            elif filtro_comp != "Todos": 
+                query_pc = query_pc.eq("nome_solicitante", filtro_comp)
+                
+            if filtro_status_pc != "Todos": 
+                query_pc = query_pc.eq("status_documento", {"Aprovado":"A","Em Aprovação":"E","Reprovado":"R"}[filtro_status_pc])
+            elif lista_peds_vinculados and filtro_req == "Todos": 
+                query_pc = query_pc.in_("pedido", lista_peds_vinculados)
+                
             res_pc = query_pc.limit(500).execute()
             df_pc_bruto = pd.DataFrame(res_pc.data)
+
+        # 🌟 CRIPTAGEM DE REVERSÃO: Se o PC achou o registro da compra do Edinelson (Pedido 2876),
+        # mas a RM 2972 ficou de fora lá em cima, essa lógica resgata a RM correspondente e injeta no df_rm_bruto!
+        if not df_pc_bruto.empty and "pedido" in df_pc_bruto.columns:
+            peds_achados = [str(int(float(x))) for x in df_pc_bruto["pedido"].unique() if pd.notna(x)]
+            rms_para_resgatar = df_vinculo[df_vinculo["pedido"].astype(str).str.replace('.0', '', regex=False).str.strip().in_(peds_achados)]["rm"].unique()
+            rms_para_resgatar = [int(float(x)) for x in rms_para_resgatar if pd.notna(x)]
+            
+            if rms_para_resgatar:
+                res_rm_resgate = supabase.table("vw_approvo_rm").select("*").in_("rm", rms_para_resgatar).execute()
+                df_rm_resgate = pd.DataFrame(res_rm_resgate.data)
+                df_rm_bruto = pd.concat([df_rm_bruto, df_rm_resgate]).drop_duplicates(subset=["rm", "mat"]).copy()
 
     if not df_pc_bruto.empty and "entregas_agendadas" in df_pc_bruto.columns:
         df_pc_bruto.drop(columns=["entregas_agendadas"], inplace=True)
