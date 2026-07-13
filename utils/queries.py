@@ -21,6 +21,8 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
             df_vinculo = pd.DataFrame(res_vinculo_obs.data)
         
         if not df_vinculo.empty and "pedido" in df_vinculo.columns:
+            # 🌟 GARANTIA NATIVA DA CHAVE: Duplica o número do PC para a string técnica
+            df_vinculo["pedido_str"] = df_vinculo["pedido"].astype(str).str.replace('.0', '', regex=False).str.strip()
             lista_peds_pontes = [str(int(float(x))) for x in df_vinculo["pedido"].unique() if pd.notna(x)]
             if lista_peds_pontes:
                 res_pc = supabase.table("vw_approvo_pc").select("*").in_("pedido", lista_peds_pontes).limit(500).execute()
@@ -41,7 +43,7 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
             res_rm = supabase.table("vw_approvo_rm").select("*").in_("rm", lista_rms_pontes).execute()
             df_rm_bruto = pd.DataFrame(res_rm.data)
 
-    # C. Fluxo de Filtros de Combinação Padrão
+    # C. Fluxo de Filtros de Combinação Padrão (O que estava rodando no print!)
     else:
         query_rm = supabase.table("vw_approvo_rm").select("*")
         if filtro_req != "Todos": 
@@ -51,7 +53,8 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
         res_rm = query_rm.limit(500).execute()
         df_rm_bruto = pd.DataFrame(res_rm.data)
 
-        query_vinculo = supabase.table("pedido_compra").select("rm", "pedido").limit(1000)
+        # 🌟 RESGATE TOTAL DE AMARRAÇÕES: Garante uma volumetria robusta na memória RAM
+        query_vinculo = supabase.table("pedido_compra").select("rm", "pedido").limit(2000)
         res_vinculo = query_vinculo.execute()
         df_vinculo = pd.DataFrame(res_vinculo.data)
 
@@ -60,8 +63,6 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
 
         if deve_buscar_pc:
             query_pc = supabase.table("vw_approvo_pc").select("*")
-            
-            # 🌟 CORREÇÃO CIRÚRGICA: Filtra o Comprador na coluna 'nome_aprovador' conforme o print do banco!
             if filtro_comp != "Todos": 
                 query_pc = query_pc.eq("nome_aprovador", filtro_comp)
             elif lista_peds_vinculados and filtro_req == "Todos": 
@@ -73,18 +74,17 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
             res_pc = query_pc.limit(500).execute()
             df_pc_bruto = pd.DataFrame(res_pc.data)
 
-        # Resgate reverso de RMs associadas aos pedidos localizados
-        if not df_pc_bruto.empty and "pedido" in df_pc_bruto.columns:
-            peds_achados = [str(int(float(x))) for x in df_pc_bruto["pedido"].unique() if pd.notna(x)]
-            rms_para_resgatar = df_vinculo[df_vinculo["pedido"].astype(str).str.replace('.0', '', regex=False).str.strip().isin(peds_achados)]["rm"].unique()
-            rms_para_resgatar = [int(float(x)) for x in rms_para_resgatar if pd.notna(x)]
-            
-            if rms_para_resgatar:
-                res_rm_resgate = supabase.table("vw_approvo_rm").select("*").in_("rm", rms_para_resgatar).execute()
-                df_rm_resgate = pd.DataFrame(res_rm_resgate.data)
-                df_rm_bruto = pd.concat([df_rm_bruto, df_rm_resgate]).drop_duplicates(subset=["rm", "mat"]).copy()
+    # Força a criação das chaves de strings técnicas direto na saída do banco para o Pandas aceitar o merge!
+    if not df_rm_bruto.empty and "rm" in df_rm_bruto.columns:
+        df_rm_bruto["rm_str"] = df_rm_bruto["rm"].astype(str).str.replace('.0', '', regex=False).str.strip()
+        df_rm_bruto["mat_str"] = df_rm_bruto["mat"].astype(str).str.replace('.0', '', regex=False).str.strip()
+        
+    if not df_pc_bruto.empty and "pedido" in df_pc_bruto.columns:
+        df_pc_bruto["pedido_str"] = df_pc_bruto["pedido"].astype(str).str.replace('.0', '', regex=False).str.strip()
+        df_pc_bruto["mat_str"] = df_pc_bruto["mat"].astype(str).str.replace('.0', '', regex=False).str.strip()
 
-    if not df_pc_bruto.empty and "entregas_agendadas" in df_pc_bruto.columns:
-        df_pc_bruto.drop(columns=["entregas_agendadas"], inplace=True)
+    if not df_vinculo.empty and "pedido" in df_vinculo.columns:
+        df_vinculo["pedido_str"] = df_vinculo["pedido"].astype(str).str.replace('.0', '', regex=False).str.strip()
+        df_vinculo["rm_str"] = df_vinculo["rm"].astype(str).str.replace('.0', '', regex=False).str.strip()
 
     return df_rm_bruto, df_pc_bruto, df_vinculo
