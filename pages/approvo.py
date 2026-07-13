@@ -26,23 +26,15 @@ SUPABASE_URL = os.getenv("SUPABASE_URL") or st.secrets.get("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY") or st.secrets.get("SUPABASE_KEY")
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# Lista simples estática para os status padrão comerciais
-opcoes_compradores = ["Todos"]
-try:
-    res_nomes_comp = supabase.table("vw_approvo_pc").select("nome_aprovador").execute()
-    opcoes_compradores = ["Todos"] + sorted(list(set([str(l.get("nome_aprovador")).replace("705.", "").strip().title() for l in res_nomes_comp.data if l.get("nome_aprovador")])))
-except Exception: pass
-
 st.markdown("#### 🔍 Painel de Filtros Globais")
 
 # ==========================================================
-# 🧱 GRID DE FILTROS REORGANIZADOS (DIGITAÇÃO INTELIGENTE ACTIVED)
+# 🧱 GRID DE FILTROS TOTALMENTE BASEADOS EM DIGITAÇÃO LIVRE
 # ==========================================================
 col_esquerda, col_centro, col_direita = st.columns(3)
 
 with col_esquerda:
     filtro_periodo = st.date_input("Intervalo (Data da Requisição):", value=[], format="DD/MM/YYYY", key="f_per")
-    # 🌟 A MUDANÇA SUPREMA: Transforma a caixa suspensa em digitação livre por texto
     filtro_req = st.text_input("Filtrar por Nome do Requisitante (Ex: Edinelson, Karolina):", key="f_req").strip()
     filtro_status_rm = st.selectbox("Status da RM:", ["Todos", "Aprovado", "Em Aprovação", "Reprovado"], key="f_st_rm")
 
@@ -52,13 +44,14 @@ with col_centro:
 
 with col_direita:
     filtro_status_pc = st.selectbox("Status do PC:", ["Todos", "Aprovado", "Em Aprovação", "Reprovado"], key="f_st_pc")
-    filtro_comp = st.selectbox("Filtrar por Nome do Comprador:", opcoes_compradores, key="f_comp")
+    # 🌟 A EVOLUÇÃO: Comprador agora também é entrada por texto livre inteligente!
+    filtro_comp = st.text_input("Filtrar por Nome do Comprador (Ex: Junior, Thais):", key="f_comp").strip()
 
 st.write("") 
 
-# Higienização segura de strings vazias
+# Higienização segura de inputs textuais
 if not filtro_req or str(filtro_req).strip() == "": filtro_req = "Todos"
-if not filtro_comp: filtro_comp = "Todos"
+if not filtro_comp or str(filtro_comp).strip() == "": filtro_comp = "Todos"
 if not filtro_status_rm: filtro_status_rm = "Todos"
 if not filtro_status_pc: filtro_status_pc = "Todos"
 
@@ -86,7 +79,7 @@ with col_btn_esquerda:
     def resetar_filtros_callback():
         for k in ["b_rm", "f_req", "f_comp", "f_st_rm", "f_st_pc", "f_per", "b_pc"]:
             if k in st.session_state:
-                st.session_state[k] = [] if k == "f_per" else "" if "b_" in k or "f_req" in k else "Todos"
+                st.session_state[k] = [] if k == "f_per" else "" if ("b_" in k or "f_req" in k or "f_comp" in k) else "Todos"
 
     st.button("♻️ Limpar Filtros", on_click=resetar_filtros_callback, use_container_width=True, key="btn_limpar_exclusivo")
 

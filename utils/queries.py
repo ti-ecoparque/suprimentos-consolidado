@@ -37,11 +37,10 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
             res_rm = supabase.table("vw_approvo_rm").select("*").in_("rm", lista_rms_pontes).execute()
             df_rm_bruto = pd.DataFrame(res_rm.data)
 
-    # Rota C: Rota de filtros por digitação rápida
+    # Rota C: Rota de filtros combinados com dupla busca inteligente ilike
     else:
         query_rm = supabase.table("vw_approvo_rm").select("*")
         
-        # 🌟 O SEGREDO DO ILIKE: Busca o nome contido ignorando maiúsculas, minúsculas ou prefixos!
         if filtro_req != "Todos" and str(filtro_req).strip() != "":
             query_rm = query_rm.ilike("nome_solicitante", f"%{str(filtro_req).strip()}%")
             
@@ -55,8 +54,10 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
         df_vinculo = pd.DataFrame(res_vinculo.data)
 
         query_pc = supabase.table("vw_approvo_pc").select("*")
-        if filtro_comp != "Todos": 
-            query_pc = query_pc.eq("nome_aprovador", filtro_comp)
+        
+        # 🌟 O SEGUNDO SEGREDO DO ILIKE: Busca o Comprador por texto contido de forma idêntica!
+        if filtro_comp != "Todos" and str(filtro_comp).strip() != "":
+            query_pc = query_pc.ilike("nome_aprovador", f"%{str(filtro_comp).strip()}%")
             
         if filtro_status_pc != "Todos": 
             query_pc = query_pc.eq("status_documento", {"Aprovado":"A","Em Aprovação":"E","Reprovado":"R"}[filtro_status_pc])
@@ -64,7 +65,7 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
         res_pc = query_pc.limit(1500).execute()
         df_pc_bruto = pd.DataFrame(res_pc.data)
 
-    # Injeção estável das chaves de strings técnicas para o processamento
+    # Injeção das chaves técnicas de strings pós-consulta
     if not df_rm_bruto.empty and "rm" in df_rm_bruto.columns:
         df_rm_bruto["rm_str"] = df_rm_bruto["rm"].astype(str).str.replace('.0', '', regex=False).str.strip()
         df_rm_bruto["mat_str"] = df_rm_bruto["mat"].astype(str).str.replace('.0', '', regex=False).str.strip()
