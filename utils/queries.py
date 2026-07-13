@@ -37,7 +37,7 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
             res_rm = supabase.table("vw_approvo_rm").select("*").in_("rm", lista_rms_pontes).execute()
             df_rm_bruto = pd.DataFrame(res_rm.data)
 
-    # Rota C: Rota de filtros suspensos de sexta-feira de manhã (O cérebro original!)
+    # Rota C: Rota de filtros por nome/status (Sincronizada com o fluxo de hoje de manhã!)
     else:
         query_rm = supabase.table("vw_approvo_rm").select("*")
         if filtro_req != "Todos": 
@@ -47,27 +47,23 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
         res_rm = query_rm.limit(500).execute()
         df_rm_bruto = pd.DataFrame(res_rm.data)
 
+        # Resgata os vínculos intermediários de chaves
         query_vinculo = supabase.table("pedido_compra").select("rm", "pedido").limit(2000)
         res_vinculo = query_vinculo.execute()
         df_vinculo = pd.DataFrame(res_vinculo.data)
 
-        lista_peds_vinculados = [str(int(float(x))) for x in df_vinculo["pedido"].unique() if pd.notna(x)] if "pedido" in df_vinculo.columns else []
-        deve_buscar_pc = filtro_comp != "Todos" or filtro_status_pc != "Todos" or len(lista_peds_vinculados) > 0 or filtro_req != "Todos"
+        # 🔥 A MÁGICA DE HOJE DE MANHÃ: Se buscou por Requisitante, traz um lote completo e global
+        # de compras do banco para o Pandas cruzar via RAM, restaurando Thais e Junior na hora!
+        query_pc = supabase.table("vw_approvo_pc").select("*")
+        if filtro_comp != "Todos": 
+            query_pc = query_pc.eq("nome_aprovador", filtro_comp)
+        if filtro_status_pc != "Todos": 
+            query_pc = query_pc.eq("status_documento", {"Aprovado":"A","Em Aprovação":"E","Reprovado":"R"}[filtro_status_pc])
+            
+        res_pc = query_pc.limit(1500).execute()
+        df_pc_bruto = pd.DataFrame(res_pc.data)
 
-        if deve_buscar_pc:
-            query_pc = supabase.table("vw_approvo_pc").select("*")
-            if filtro_comp != "Todos": 
-                query_pc = query_pc.eq("nome_aprovador", filtro_comp)
-            elif lista_peds_vinculados and filtro_req == "Todos": 
-                query_pc = query_pc.in_("pedido", lista_peds_vinculados)
-                
-            if filtro_status_pc != "Todos": 
-                query_pc = query_pc.eq("status_documento", {"Aprovado":"A","Em Aprovação":"E","Reprovado":"R"}[filtro_status_pc])
-                
-            res_pc = query_pc.limit(500).execute()
-            df_pc_bruto = pd.DataFrame(res_pc.data)
-
-    # Garante a injeção nativa de strings técnicas puras que o Pandas espera para cruzar
+    # Injeção das chaves técnicas de strings que o processamento utiliza para o Outer Join
     if not df_rm_bruto.empty and "rm" in df_rm_bruto.columns:
         df_rm_bruto["rm_str"] = df_rm_bruto["rm"].astype(str).str.replace('.0', '', regex=False).str.strip()
         df_rm_bruto["mat_str"] = df_rm_bruto["mat"].astype(str).str.replace('.0', '', regex=False).str.strip()
