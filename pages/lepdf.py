@@ -206,7 +206,7 @@ if arquivos_enviados:
             except Exception as e:
                 st.error(f"⚠️ Falha ao ler os dados do arquivo {arquivo_buffer.name}: {e}")
                 continue
-        # --- ETAPA 2: DISPARO EM LOTE ÚNICO E SEPARAÇÃO DE VÁLIDOS VS IGNORADOS ---
+                # --- ETAPA 2: DISPARO EM LOTE ÚNICO E SEPARAÇÃO DE VÁLIDOS VS IGNORADOS ---
         if todos_os_registros:
             try:
                 resposta = salvar_itens_no_banco(todos_os_registros)
@@ -223,7 +223,7 @@ if arquivos_enviados:
                     st.session_state.mensagem_tipo = "sucesso"
                     df_retorno = pd.DataFrame(dados_inseridos_reais)
                     
-                    # dropna=False assegura que chaves com RMs nulas não sejam excluídas pelo Pandas [1]
+                    # dropna=False assegura que chaves com RMs nulas não sejam excluídas pelo Pandas
                     for (ped, rm_num), sub_df in df_retorno.groupby(["pedido", "rm"], dropna=False):
                         ped_int = int(ped)
                         rm_int = int(rm_num) if pd.notnull(rm_num) else None
@@ -243,12 +243,13 @@ if arquivos_enviados:
                 else:
                     st.session_state.mensagem_tipo = "tudo_duplicado"
                 
-                # Valida individualmente se cada combinação gerada no lote foi salva ou rejeitada pelo banco
+                # ✔ CORREÇÃO COMPLETA: Varre individualmente cada RM lida para listar todas no relatório
                 resumo_ignorados = []
                 for ped_lido in todos_os_pedidos_lidos:
                     rms_deste_pedido = mapa_pedido_rm.get(ped_lido, [None])
                     
                     for rm_lida in rms_deste_pedido:
+                        # Se a combinação específica (Pedido, RM) não foi inserida no banco, ela vai para os ignorados
                         if (ped_lido, rm_lida) not in combinacoes_inseridas_reais:
                             materiais_rejeitados = sorted(list(mapa_pedido_materiais.get(ped_lido, set())))
                             if not materiais_rejeitados: 
@@ -257,8 +258,8 @@ if arquivos_enviados:
                             rm_exibicao = rm_lida if rm_lida is not None else "N/A"
                             
                             resumo_ignorados.append({
-                                "Pedido": ped_lido,
-                                "RM": rm_exibicao,
+                                "Pedido": int(ped_lido),
+                                "RM": rm_exibicao,  # Aqui agora vai exibir corretamente individualizado (3003 e depois 2972)
                                 "Materiais Rejeitados": ", ".join(materiais_rejeitados),
                                 "CNPJ Fornecedor": mapa_cnpjs.get(ped_lido, "N/A"),
                                 "Status": "Ignorado (Já Existe)"
@@ -294,6 +295,11 @@ if st.session_state.get("mostrar_tabela_resumo"):
     if st.session_state.get("dados_ignorados"):
         st.subheader("🚨 Relatório de Pedidos Bloqueados (Já Existentes / Ignorados)")
         df_ignorados = pd.DataFrame(st.session_state.dados_ignorados)
+        
+        # ✔ GARANTIA: Força a ordenação visual das colunas para evitar desalinhamento no Streamlit
+        colunas_ordenadas = ["Pedido", "RM", "Materiais Rejeitados", "CNPJ Fornecedor", "Status"]
+        df_ignorados = df_ignorados.reindex(columns=colunas_ordenadas)
+        
         st.dataframe(df_ignorados, use_container_width=True, hide_index=True)
 
     # Botão de reset completo da visualização
