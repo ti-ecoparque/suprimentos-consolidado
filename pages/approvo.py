@@ -29,7 +29,7 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 opcoes_requisitas = ["Todos"]
 opcoes_compradores = ["Todos"]
 try:
-    # 🌟 LISTAGEM PUREZA TOTAL: Busca direto na tabela física rel_solicitacao_compras
+    # 🌟 1. CAPTURA DE REQUISITANTES DA TABELA FÍSICA
     res_nomes_req = supabase.table("rel_solicitacao_compras").select("usuario_solicitante").execute()
     
     nomes_tratados_req = []
@@ -39,17 +39,19 @@ try:
             if nome_cru and str(nome_cru).strip() not in ["", "nan", "None", "---"]:
                 nome_limpo = str(nome_cru).strip()
                 
-                # Corta o prefixo "705." se ele existir na string
+                # ✂️ FIX DO SPLICING SECURE: Fatia o texto no ponto e captura estritamente o índice [1] (o nome real!)
                 if "." in nome_limpo:
                     partes = nome_limpo.split(".", 1)
                     if len(partes) > 1:
-                        nome_limpo = partes[1].strip()
+                        nome_limpo = partes[1].strip() # Pega a segunda parte textual e limpa os espaços
                 
+                # Garante iniciais maiúsculas elegantes (Ex: Edinelson Vieira)
                 nomes_tratados_req.append(nome_limpo.title())
                 
+    # O set() elimina duplicidades e ordena alfabeticamente de A a Z
     opcoes_requisitas = ["Todos"] + sorted(list(set(nomes_tratados_req)))
 
-    # Coleta de compradores da visão de compras
+    # 🌟 2. CAPTURA DE COMPRADORES DA VISÃO DE COMPRAS
     res_nomes_comp = supabase.table("vw_approvo_pc").select("nome_aprovador").execute()
     nomes_tratados_comp = []
     if res_nomes_comp.data:
@@ -68,6 +70,7 @@ try:
     opcoes_compradores = ["Todos"] + sorted(list(set(nomes_tratados_comp)))
 
 except Exception as e:
+    # Proteção de redundância: impede que a tela quebre se o banco oscilar
     pass
 
 st.markdown("#### 🔍 Painel de Filtros Globais")
