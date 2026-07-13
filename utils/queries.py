@@ -5,22 +5,31 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
     df_pc_bruto = pd.DataFrame()
     df_vinculo = pd.DataFrame()
 
+    # A. Rota Isolada por Número da RM
     if buscar_rm and str(buscar_rm).strip() != "":
         rm_alvo = str(buscar_rm).strip()
         rm_parametro = int(rm_alvo) if rm_alvo.isdigit() else rm_alvo
         
+        # 1. Busca direta na visão de RMs do Supabase
         res_rm = supabase.table("vw_approvo_rm").select("*").eq("rm", rm_parametro).limit(500).execute()
         df_rm_bruto = pd.DataFrame(res_rm.data)
         
+        # 🚨 PONTE INTELIGENTE: Tenta buscar o número exato na coluna RM
         res_vinculo = supabase.table("pedido_compra").select("rm", "pedido").eq("rm", int(rm_alvo) if rm_alvo.isdigit() else 0).execute()
         df_vinculo = pd.DataFrame(res_vinculo.data)
+        
+        # 🌟 MULTI-MATCH: Se não achou na coluna RM, busca o texto contido na coluna observacao (Mata o problema do print!)
+        if df_vinculo.empty:
+            res_vinculo_obs = supabase.table("pedido_compra").select("rm", "pedido").ilike("observacao", f"%{rm_alvo}%").execute()
+            df_vinculo = pd.DataFrame(res_vinculo_obs.data)
         
         if not df_vinculo.empty and "pedido" in df_vinculo.columns:
             lista_peds_pontes = [str(int(float(x))) for x in df_vinculo["pedido"].unique() if pd.notna(x)]
             if lista_peds_pontes:
                 res_pc = supabase.table("vw_approvo_pc").select("*").in_("pedido", lista_peds_pontes).limit(500).execute()
                 df_pc_bruto = pd.DataFrame(res_pc.data)
-
+                
+    # B. Rota Isolada por Número do PC
     elif buscar_pc and str(buscar_pc).strip() != "":
         pc_alvo = str(buscar_pc).strip()
         query_pc = supabase.table("vw_approvo_pc").select("*").eq("pedido", pc_alvo)
@@ -35,6 +44,7 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
             res_rm = supabase.table("vw_approvo_rm").select("*").in_("rm", lista_rms_pontes).execute()
             df_rm_bruto = pd.DataFrame(res_rm.data)
 
+    # C. Fluxo de Filtros de Combinação Padrão
     else:
         query_rm = supabase.table("vw_approvo_rm").select("*")
         if filtro_req != "Todos": query_rm = query_rm.eq("nome_solicitante", filtro_req)
