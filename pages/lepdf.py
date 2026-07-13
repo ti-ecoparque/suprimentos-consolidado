@@ -49,7 +49,7 @@ def extrair_dados_cabecalho_e_metadados(texto_completo: str) -> dict:
     padrao_pedido = re.search(r"pedido:\s*(\d+)", texto_completo, re.IGNORECASE)
     metadados["pedido"] = int(padrao_pedido.group(1)) if padrao_pedido else None
 
-    # 2. Extração de Múltiplas RMs (Ex: RMs: 3003, 2972 ou RM: 3003)
+    # 2. Extração de Múltiplas RMs (Procura especificamente no bloco final do documento)
     lista_rms = []
     padrao_bloco_rm = re.search(r"RMs?:\s*([\d\s,;-]+)", texto_completo, re.IGNORECASE)
     if padrao_bloco_rm:
@@ -60,7 +60,7 @@ def extrair_dados_cabecalho_e_metadados(texto_completo: str) -> dict:
         if padrao_rm_antigo: 
             lista_rms = [int(padrao_rm_antigo.group(1))]
         else:
-            lista_rms = [None] # Fallback para manter o fluxo se não houver RM
+            lista_rms = [None]
     metadados["lista_rms"] = lista_rms
 
     # 3. Extração de CNPJ, Comprador e Observações
@@ -80,7 +80,7 @@ def extrair_dados_cabecalho_e_metadados(texto_completo: str) -> dict:
             observacao = linhas_texto[0].strip()
     metadados["observacao"] = observacao
 
-    # 4. Extração de Datas (Emissão, Entrega Cabeçalho, Entrega Geral e Agendadas)
+    # 4. Extração de Datas
     padrao_dt_entrega = re.search(r"Dt\.\s*Entrega\s*:\s*(\d{2}/\d{2}/\d{4})", texto_completo, re.IGNORECASE)
     metadados["dt_entrega_cabecalho"] = converter_data(padrao_dt_entrega.group(1)) if padrao_dt_entrega else None
 
@@ -116,13 +116,13 @@ def extrair_itens_materiais(texto_completo: str, meta: dict, todos_registros_lis
         partes = [p for p in linha_limpa.split(" ") if p]
         
         if len(partes) >= 5:
+            # ✔ CORREÇÃO: Adicionado o índice [0] para pegar estritamente a primeira coluna de texto
             codigo_material = partes[0]
-            # Valida se a primeira coluna é estritamente um código numérico de material
+            
             if codigo_material.isdigit() and len(codigo_material) <= 9:
                 mat_int = int(codigo_material)
                 mapa_materiais_controle[pedido].add(str(mat_int))
                 
-                # ✔ GERAÇÃO MULTIPLEXADA: Grava uma linha para cada RM do bloco detectado
                 for rm_atual in meta["lista_rms"]:
                     todos_registros_lista.append({
                         "rm": rm_atual,
@@ -136,7 +136,6 @@ def extrair_itens_materiais(texto_completo: str, meta: dict, todos_registros_lis
                         "observacao": meta["observacao"],
                         "entregas_agendadas": meta["entregas_agendadas"]
                     })
-
 
 # ==============================================================================
 # 3. ESTADOS DE SESSÃO PERSISTENTES DO STREAMLIT
