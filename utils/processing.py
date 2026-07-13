@@ -52,7 +52,7 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     df_pc_limpo.rename(columns={"comprador_limpo": "comprador"}, inplace=True, errors="ignore")
     df_pc_limpo = df_pc_limpo.drop_duplicates().copy()
 
-    # 🌟 TRAVA DE SEGURANÇA MÁXIMA: O relacionamento exige o casamento perfeito do Pedido E do Material simultaneamente
+    # Trava de segurança máxima: relacionamento obriga o match por pedido e material simultaneamente
     df_final = pd.merge(df_rm_consolidada, df_pc_limpo, on=["pedido_str", "mat_str"], how="left")
 
     todas_colunas_vitais = ["nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "rm_str", "mat_str", "pedido_str", "comprador", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"]
@@ -84,11 +84,14 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     df_final["rm_mat_seq_key"] = df_final["rm"].astype(str) + "_" + df_final["mat"].astype(str) + "_" + df_final["seq_item"]
     df_final = df_final.drop_duplicates(subset=["rm_mat_seq_key"]).copy()
 
-    # Cálculo de Datas
+    # Cálculo de Datas Nativo com Retranca Contra Intervalos Incompletos
     lista_alertas_data, lista_entrega_dt_bruta, lista_necessidade_dt_bruta, indices_para_manter = [], [], [], []
     ignorar_calendario = (buscar_rm != "") or (buscar_pc != "")
-    data_inicio_filtro = filtro_periodo if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2 else None
-    data_fim_filtro = filtro_periodo if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2 else None
+    
+    # 🌟 TRAVA CONTRA LISTAS INCOMPLETAS: Só ativa as variáveis de datas se o usuário selecionou Início E Fim legítimos
+    possui_intervalo_valido = isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2
+    data_inicio_filtro = filtro_periodo[0] if possui_intervalo_valido else None
+    data_fim_filtro = filtro_periodo[1] if possui_intervalo_valido else None
 
     for idx in df_final.index:
         val_entrega = df_final.loc[idx, "entrega"]
@@ -107,6 +110,7 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
 
         dt_ent, dt_nec, dt_emi = conv(val_entrega), conv(val_necessidade), conv(val_emissao)
 
+        # Se o calendário estiver incompleto ou pendente de clique, o Python pula esta verificação de forma segura!
         if not ignorar_calendario and data_inicio_filtro and data_fim_filtro:
             if dt_emi is None or not (data_inicio_filtro <= dt_emi <= data_fim_filtro): continue
 
