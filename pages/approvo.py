@@ -29,8 +29,7 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 opcoes_requisitas = ["Todos"]
 opcoes_compradores = ["Todos"]
 try:
-    # 🌟 1. REQUISITANTES DIRETOS DA TABELA FÍSICA (Garante Edinelson, Karolina e todos os donos das RMs!)
-    # Busca estritamente na tabela rel_solicitacao_compras usando a coluna usuario_solicitante
+    # 🌟 VASCULHAMENTO DE FORÇA BRUTA: Puxa o lote bruto de nomes direto da tabela física
     res_nomes_req = supabase.table("rel_solicitacao_compras").select("usuario_solicitante").execute()
     
     nomes_tratados_req = []
@@ -38,29 +37,38 @@ try:
         for registro in res_nomes_req.data:
             nome_cru = registro.get("usuario_solicitante")
             if nome_cru and str(nome_cru).strip() not in ["", "nan", "None", "---"]:
-                # .title() padroniza os nomes visualmente (Ex: Edinelson Vieira, Karolina Santos)
-                nomes_tratados_req.append(str(nome_cru).strip().title())
+                nome_limpo = str(nome_cru).strip()
                 
-    # Remove repetições e organiza de A a Z de forma impecável
+                # ✂️ ENGENHARIA DE TEXTO: Se o nome contiver o ponto da filial (ex: "705.Edinelson"), 
+                # divide o texto no "." e captura apenas a segunda parte (o nome real!)
+                if "." in nome_limpo:
+                    nome_limpo = nome_limpo.split(".", 1)[1].strip()
+                
+                # Formata com iniciais maiúsculas e salva na lista
+                nomes_tratados_req.append(nome_limpo.title())
+                
+    # O set() elimina duplicidades de forma automática na memória RAM
     opcoes_requisitas = ["Todos"] + sorted(list(set(nomes_tratados_req)))
 
-    # 🌟 2. COMPRADORES PUROS DA VISÃO DE COMPRAS
-    # Mantém a busca estrita na coluna nome_aprovador da visão de PCs onde estão Junior e Thais
+    # Puxa os compradores reais sem colisão
     res_nomes_comp = supabase.table("vw_approvo_pc").select("nome_aprovador").execute()
-    
     nomes_tratados_comp = []
     if res_nomes_comp.data:
         for registro in res_nomes_comp.data:
             comp_cru = registro.get("nome_aprovador")
             if comp_cru and str(comp_cru).strip() not in ["", "nan", "None", "---"]:
-                nomes_tratados_comp.append(str(comp_cru).strip().title())
+                comp_limpo = str(comp_cru).strip()
+                
+                # Aplica a mesma limpeza caso os compradores também tragam códigos de filiais
+                if "." in comp_limpo:
+                    comp_limpo = comp_limpo.split(".", 1)[1].strip()
+                    
+                nomes_tratados_comp.append(comp_limpo.title())
             
     opcoes_compradores = ["Todos"] + sorted(list(set(nomes_tratados_comp)))
 
 except Exception as e:
-    # Mantém a segurança do painel ativa em caso de oscilação de rede
     pass
-
 st.markdown("#### 🔍 Painel de Filtros Globais")
 
 # ==========================================================
