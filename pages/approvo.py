@@ -68,6 +68,7 @@ filtro_status_pc = st.selectbox("Status do PC:", ["Todos", "Aprovado", "Em Aprov
 
 st.write("") 
 
+# (O seu código de higienização de filtros continua normal acima...)
 if not filtro_req: filtro_req = "Todos"
 if not filtro_comp: filtro_comp = "Todos"
 if not filtro_status_rm: filtro_status_rm = "Todos"
@@ -91,5 +92,20 @@ if df_final.empty:
     st.warning("⚠️ Nenhum registro localizado para o período filtrado.")
     st.stop()
 
-# 🚨 CORREÇÃO DA ASSINATURA: Removemos a variável 'st' duplicada para bater com as 3 chaves do subarquivo
-renderizar_grid_multiindex_colorido(df_final, lista_ent, lista_nec)
+# ==========================================================
+# 🚨 NOVA RETRANCA DE LAYOUT: BOTÕES LADO A LADO NO TOPO DA TABELA
+# ==========================================================
+col_btn_esquerda, col_btn_direita = st.columns(2)
+
+# 1. Desenha o botão de limpar perfeitamente encaixado no lado esquerdo
+with col_btn_esquerda:
+    # Função segura de reset nativo via Session State
+    def resetar_filtros_callback():
+        for k in ["b_rm", "f_req", "f_comp", "f_st_rm", "f_st_pc", "f_per", "b_pc"]:
+            if k in st.session_state:
+                st.session_state[k] = [] if k == "f_per" else "" if "b_" in k else "Todos"
+
+    st.button("♻️ Limpar Filtros", on_click=resetar_filtros_callback, use_container_width=True)
+
+# 2. Desenha a tabela em largura cheia e joga o botão de exportar para a col_btn_direita
+renderizar_grid_multiindex_colorido(df_final, lista_ent, lista_nec, col_btn_direita)
