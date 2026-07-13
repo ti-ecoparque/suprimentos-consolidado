@@ -77,13 +77,18 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
 
     # Filtros de Interface em Memória RAM
     if buscar_rm:
-        df_final = df_final[df_final["rm"].str.contains(str(buscar_rm).strip(), na=False, regex=False)]
+        df_final = df_final[df_final["rm"].astype(str).str.contains(str(buscar_rm).strip(), na=False, regex=False)]
+        
     if filtro_req != "Todos":
-        df_final = df_final[df_final["nome_solicitante"] == str(filtro_req).strip()]
+        # Se o usuário escolher "Edinelson Vieira", aceita a linha "705.Edinelson Vieira" nativamente!
+        df_final = df_final[df_final["nome_solicitante"].astype(str).str.contains(str(filtro_req).strip(), na=False, regex=False)]
+        
     if filtro_comp != "Todos":
-        df_final = df_final[df_final["comprador"] == str(filtro_comp).strip()]
+        df_final = df_final[df_final["comprador"].astype(str).str.contains(str(filtro_comp).strip(), na=False, regex=False)]
+        
     if buscar_pc and str(buscar_pc).strip() not in ["", "---", "nan", "None"]:
-        df_final = df_final[df_final["pedido_str"].str.contains(str(buscar_pc).strip(), na=False, regex=False)]
+        df_final = df_final[df_final["pedido_str"].astype(str).str.contains(str(buscar_pc).strip(), na=False, regex=False)]
+        
     if filtro_status_pc != "Todos":
         df_final = df_final[df_final["status_pc"].astype(str).str.strip().str.upper() == {"Aprovado":"A","Em Aprovação":"E","Reprovado":"R"}[filtro_status_pc].upper()]
 

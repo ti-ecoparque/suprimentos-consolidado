@@ -29,7 +29,7 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 opcoes_requisitas = ["Todos"]
 opcoes_compradores = ["Todos"]
 try:
-    # 🌟 VASCULHAMENTO: Puxa o lote bruto de nomes direto da tabela física
+    # 🌟 LISTAGEM PUREZA TOTAL: Busca direto na tabela física rel_solicitacao_compras
     res_nomes_req = supabase.table("rel_solicitacao_compras").select("usuario_solicitante").execute()
     
     nomes_tratados_req = []
@@ -39,19 +39,17 @@ try:
             if nome_cru and str(nome_cru).strip() not in ["", "nan", "None", "---"]:
                 nome_limpo = str(nome_cru).strip()
                 
-                # ✂️ SEPARAÇÃO INTELIGENTE: Só fatia o texto se o ponto realmente existir no nome!
+                # Corta o prefixo "705." se ele existir na string
                 if "." in nome_limpo:
                     partes = nome_limpo.split(".", 1)
                     if len(partes) > 1:
                         nome_limpo = partes[1].strip()
                 
-                # Formata com iniciais maiúsculas e salva na lista
                 nomes_tratados_req.append(nome_limpo.title())
                 
-    # O set() elimina duplicidades de forma automática na memória RAM
     opcoes_requisitas = ["Todos"] + sorted(list(set(nomes_tratados_req)))
 
-    # Puxa os compradores reais sem colisão
+    # Coleta de compradores da visão de compras
     res_nomes_comp = supabase.table("vw_approvo_pc").select("nome_aprovador").execute()
     nomes_tratados_comp = []
     if res_nomes_comp.data:
@@ -60,7 +58,6 @@ try:
             if comp_cru and str(comp_cru).strip() not in ["", "nan", "None", "---"]:
                 comp_limpo = str(comp_cru).strip()
                 
-                # Aplica a mesma proteção para a lista de compradores
                 if "." in comp_limpo:
                     partes = comp_limpo.split(".", 1)
                     if len(partes) > 1:
@@ -68,7 +65,7 @@ try:
                     
                 nomes_tratados_comp.append(comp_limpo.title())
             
-    opcoes_compradores = ["Todos"] + sorted(list(set(nomes_放tados_comp)))
+    opcoes_compradores = ["Todos"] + sorted(list(set(nomes_tratados_comp)))
 
 except Exception as e:
     pass
