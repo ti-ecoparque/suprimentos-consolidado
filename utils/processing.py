@@ -47,8 +47,14 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     df_pc_limpo.rename(columns={"mat":"mat", "nome_solicitante":"comprador", "status_documento":"status_pc", "data_oficial_ocorrencia":"data_ocorrencia_pc", "data_ocorrencia":"data_ocorrencia_pc", "nome_aprovador":"nome_aprovador_pc", "quantidade":"quantidade_comprada"}, inplace=True, errors="ignore")
     df_pc_limpo = df_pc_limpo.drop_duplicates().copy()
 
-    # 🚨 RESTAURAÇÃO MÁXIMA: Cruzamento original rígido por Pedido e Material (Garante Thais/Junior na tela)
-    df_final = pd.merge(df_rm_consolidada, df_pc_limpo, on=["pedido_str", "mat_str"], how="outer")
+    # 🌟 A LÓGICA DE HOJE DE MANHÃ: Junção flexível apenas por material (mat_str)
+    # Isso força o preenchimento dos compradores e datas ignorando os índices de pedidos vazios!
+    df_final = pd.merge(df_rm_consolidada, df_pc_limpo, on=["mat_str"], how="outer")
+
+    if "pedido_str_y" in df_final.columns:
+        df_final["pedido_str"] = df_final["pedido_str_y"].replace("---", "").fillna(df_final.get("pedido_str_x", "---"))
+    elif "pedido_str_x" in df_final.columns:
+        df_final["pedido_str"] = df_final["pedido_str_x"]
 
     todas_colunas_vitais = ["nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "rm_str", "mat_str", "pedido_str", "comprador", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"]
     for col in todas_colunas_vitais:
@@ -63,7 +69,7 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     df_final["nome_solicitante"] = df_final["nome_solicitante"].fillna("---").astype(str).str.strip()
     df_final["comprador"] = df_final["comprador"].fillna("---").astype(str).str.strip()
 
-    # Filtros em memória RAM rápidos e responsivos
+    # Filtros de interface
     if buscar_rm:
         df_final = df_final[df_final["rm"].str.contains(str(buscar_rm).strip(), na=False, regex=False)]
     if filtro_req != "Todos":
@@ -79,12 +85,12 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     df_final["rm_mat_seq_key"] = df_final["rm"].astype(str) + "_" + df_final["mat"].astype(str) + "_" + df_final["seq_item"]
     df_final = df_final.drop_duplicates(subset=["rm_mat_seq_key"]).copy()
 
-    # Cálculo de Datas Nativo Seguro Restabelecido
+    # Cálculo de Datas Nativo Seguro
     lista_alertas_data, lista_entrega_dt_bruta, lista_necessidade_dt_bruta, indices_para_manter = [], [], [], []
     ignorar_calendario = (buscar_rm != "") or (buscar_pc != "")
     
-    data_inicio_filtro = filtro_periodo[0] if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2 else None
-    data_fim_filtro = filtro_periodo[1] if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2 else None
+    data_inicio_filtro = filtro_periodo if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2 else None
+    data_fim_filtro = filtro_periodo if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2 else None
 
     for idx in df_final.index:
         val_entrega = df_final.loc[idx, "entrega"]
