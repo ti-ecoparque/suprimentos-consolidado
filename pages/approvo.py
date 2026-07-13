@@ -29,11 +29,32 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 opcoes_requisitas = ["Todos"]
 opcoes_compradores = ["Todos"]
 try:
+    # 🌟 CORREÇÃO DO SELETOR: Varre a vw_approvo_rm e coleta todos os nomes legítimos de solicitantes
     res_nomes_req = supabase.table("vw_approvo_rm").select("nome_solicitante").execute()
-    opcoes_requisitas = ["Todos"] + sorted(list(set([str(l.get("nome_solicitante")).strip() for l in res_nomes_req.data if l.get("nome_solicitante")])))
-    res_nomes_comp = supabase.table("vw_approvo_pc").select("nome_solicitante").execute()
-    opcoes_compradores = ["Todos"] + sorted(list(set([str(l.get("nome_solicitante")).strip() for l in res_nomes_comp.data if l.get("nome_solicitante")])))
-except Exception: pass
+    
+    # Faz uma varredura limpa, remove duplicados e converte para letras normais padronizadas
+    nomes_tratados_req = []
+    for l in res_nomes_req.data:
+        nome_cru = l.get("nome_solicitante")
+        if nome_cru and str(nome_cru).strip() not in ["", "nan", "None", "---"]:
+            nomes_tratados_req.append(str(nome_cru).strip())
+            
+    # Remove repetições e organiza de A a Z de forma impecável
+    opcoes_requisitas = ["Todos"] + sorted(list(set(nomes_tratados_req)))
+
+    # Varre a vw_approvo_pc e coleta os nomes de compradores estáveis
+    res_nomes_comp = supabase.table("vw_approvo_pc").select("comprador").execute()
+    nomes_tratados_comp = []
+    for l in res_nomes_comp.data:
+        comp_cru = l.get("comprador")
+        if comp_cru and str(comp_cru).strip() not in ["", "nan", "None", "---"]:
+            nomes_tratados_comp.append(str(comp_cru).strip())
+            
+    opcoes_compradores = ["Todos"] + sorted(list(set(nomes_tratados_comp)))
+
+except Exception as e:
+    # Caso ocorra qualquer erro invisível de rede, mantém a segurança do painel ativa
+    pass
 
 st.markdown("#### 🔍 Painel de Filtros Globais")
 
