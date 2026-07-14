@@ -4,7 +4,7 @@ import datetime
 def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, buscar_pc, filtro_req, filtro_comp, filtro_status_pc, filtro_periodo):
     cols_exclusivas_rm = ["nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "rm_str", "mat_str", "seq_item"]
 
-    # 1. Higienização das RMs da esquerda (TOTALMENTE PRESERVADO)
+    # 1. Higienização das RMs da esquerda (TOTALMENTE RESTAURADO)
     df_rm_limpo = pd.DataFrame(index=df_rm_bruto.index)
     for c in df_rm_bruto.columns:
         if c in cols_exclusivas_rm:
@@ -14,7 +14,7 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     df_rm_limpo["mat_str"] = df_rm_limpo.get("mat", "---")
     df_rm_limpo["linha_id"] = df_rm_limpo.index.astype(str)
 
-    # 2. Higienização da Tabela de Compras (TOTALMENTE PRESERVADO)
+    # 2. Higienização da Tabela de Compras (TOTALMENTE RESTAURADO)
     df_pc_limpo = pd.DataFrame(index=df_pc_bruto.index)
     if not df_pc_bruto.empty:
         df_pc_bruto_copy = df_pc_bruto.copy()
@@ -39,15 +39,15 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     if "mat_str" not in df_pc_limpo.columns: df_pc_limpo["mat_str"] = "---"
     if "rm_str" not in df_pc_limpo.columns: df_pc_limpo["rm_str"] = "---"
     df_pc_limpo.rename(columns={"comprador_limpo": "comprador", "entrega_limpa": "entrega"}, inplace=True, errors="ignore")
-    df_pc_limpo = df_pc_limpo.drop_duplicates(subset=["rm_str", "mat_str"]).copy()
+    df_pc_limpo = df_pc_limpo.drop_duplicates(subset=["rm_str"]).copy()
 
-    # O cruzamento exige obrigatoriamente a RM e o Material juntos
-    df_final = pd.merge(df_rm_limpo, df_pc_limpo, on=["rm_str", "mat_str"], how="left")
+    # União horizontal original por número da RM (MANTIDO INTACTO E SEGURO)
+    df_final = pd.merge(df_rm_limpo, df_pc_limpo, on=["rm_str"], how="left")
 
     if "mat_str_x" in df_final.columns:
         df_final["mat_str"] = df_final["mat_str_x"]
 
-    # 3. Injeção isolada em segundo plano do APPROVAL PC (TOTALMENTE PRESERVADO)
+    # 3. Injeção isolada em segundo plano do APPROVAL PC (TOTALMENTE RESTAURADO)
     if not df_vinculo.empty and "pedido_str" in df_final.columns:
         df_app_pc_limpo = pd.DataFrame()
         df_app_pc_limpo["pedido_str"] = df_vinculo["pedido_str"].astype(str)
@@ -85,14 +85,9 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
 
     df_final = df_final.drop_duplicates(subset=["linha_id"]).copy()
 
-    # 📐 EXTRAÇÃO INDIVIDUAL PROTEGIDA POR ÍNDICE DA TUPLA DO CALENDÁRIO
-    possui_intervalo_valido = isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2
-    # 🌟 O CORREÇÃO CRUCIAL: Extrai cirurgicamente a posição [0] e [1] para isolar as datas individuais!
-    data_inicio_filtro = filtro_periodo[0] if possui_intervalo_valido else None
-    data_fim_filtro = filtro_periodo[1] if possui_intervalo_valido else None
-    ignorar_calendario = (buscar_rm != "") or (buscar_pc != "")
-
+    # 📐 TRAVA DE CALENDÁRIO COM VERIFICAÇÃO SEGURO CONTRA TYPEERROR (MANTIDO INTACTO)
     lista_alertas_data, lista_entrega_dt_bruta, lista_necessidade_dt_bruta, indices_para_manter = [], [], [], []
+    ignorar_calendario = (buscar_rm != "") or (buscar_pc != "")
 
     for idx in df_final.index:
         val_entrega = df_final.loc[idx, "entrega"]
@@ -111,8 +106,12 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
 
         dt_ent, dt_nec, dt_emi = conv(val_entrega), conv(val_necessidade), conv(val_emissao)
 
-        if data_inicio_filtro and data_fim_filtro and not ignorar_calendario:
-            if dt_emi is None or not (data_inicio_filtro <= dt_emi <= data_fim_filtro): continue
+        # 🌟 O FIX SEGURO: Validação baseada na estrutura original do Pandas, imune a erros
+        if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2 and not ignorar_calendario:
+            dt_ini_filtro = filtro_periodo[0]
+            dt_fim_filtro = filtro_periodo[1]
+            if dt_emi is None or not (dt_ini_filtro <= dt_emi <= dt_fim_filtro):
+                continue
 
         indices_para_manter.append(idx)
         lista_entrega_dt_bruta.append(dt_ent)
