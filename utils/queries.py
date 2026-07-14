@@ -5,7 +5,7 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
     df_pc_bruto = pd.DataFrame()
     df_vinculo = pd.DataFrame()
 
-    # Rota A: Busca isolada por número de RM
+    # Rota A: Busca isolada por número de RM - TOTALMENTE PRESERVADO
     if buscar_rm and str(buscar_rm).strip() != "":
         rm_alvo = str(buscar_rm).strip()
         rm_parametro = int(rm_alvo) if rm_alvo.isdigit() else rm_alvo
@@ -16,7 +16,7 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
         res_pc = supabase.table("pedido_compra").select("*").eq("rm", str(rm_alvo)).execute()
         df_pc_bruto = pd.DataFrame(res_pc.data)
 
-    # Rota B: Busca isolada por número do PC
+    # Rota B: Busca isolada por número do PC - TOTALMENTE PRESERVADO
     elif buscar_pc and str(buscar_pc).strip() != "":
         pc_alvo = str(buscar_pc).strip()
         
@@ -28,7 +28,7 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
             res_rm = supabase.table("vw_approvo_rm").select("*").in_("rm", lista_rms_pontes).execute()
             df_rm_bruto = pd.DataFrame(res_rm.data)
 
-    # Rota C: Fluxo de Filtros Combinados Globais (Histórico e Estável!)
+    # Rota C: Fluxo de Filtros Combinados Globais (Correção da Carga Comercial)
     else:
         query_rm = supabase.table("vw_approvo_rm").select("*")
         if filtro_req != "Todos" and str(filtro_req).strip() != "":
@@ -38,14 +38,15 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
         res_rm = query_rm.limit(2000).execute()
         df_rm_bruto = pd.DataFrame(res_rm.data)
 
-        # Resgata a volumetria global estável da tabela comercial física para o cache em RAM
+        # 🌟 DESTRAVAMENTO VOLUMÉTRICO TOTAL: Puxa toda a massa da tabela física sem travas de limit()
+        # Isso garante que as RMs da Adrielle, Karolina e Fabiana encontrem seus pares na memória RAM!
         query_pc = supabase.table("pedido_compra").select("*")
         if filtro_comp != "Todos" and str(filtro_comp).strip() != "":
             query_pc = query_pc.ilike("comprador", f"%{str(filtro_comp).strip()}%")
-        res_pc = query_pc.limit(2000).execute()
+        res_pc = query_pc.execute()
         df_pc_bruto = pd.DataFrame(res_pc.data)
 
-    # Camada isolada de cache para o Approval PC por número de pedido
+    # Camada isolada de cache para o Approval PC por número de pedido - TOTALMENTE PRESERVADO
     lista_peds_cache = []
     if not df_pc_bruto.empty and "pedido" in df_pc_bruto.columns:
         lista_peds_cache = [str(x).replace('.0', '').strip() for x in df_pc_bruto["pedido"].unique() if pd.notna(x) and str(x).strip() != ""]
@@ -54,7 +55,7 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
         res_vinculo = supabase.table("vw_approvo_pc").select("*").in_("pedido", lista_peds_cache).execute()
         df_vinculo = pd.DataFrame(res_vinculo.data)
 
-    # Sincronização uniforme de strings técnicas para o Pandas
+    # Sincronização de chaves textuais estáveis para o Pandas
     if not df_rm_bruto.empty and "rm" in df_rm_bruto.columns:
         df_rm_bruto["rm_str"] = df_rm_bruto["rm"].astype(str).str.replace('.0', '', regex=False).str.strip()
         df_rm_bruto["mat_str"] = df_rm_bruto["mat"].astype(str).str.replace('.0', '', regex=False).str.strip()
