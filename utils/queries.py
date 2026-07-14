@@ -5,7 +5,7 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
     df_pc_bruto = pd.DataFrame()
     df_vinculo = pd.DataFrame()
 
-    # Rota A: Busca isolada por número de RM
+    # Rota A: Busca isolada por número de RM - TOTALMENTE PRESERVADO
     if buscar_rm and str(buscar_rm).strip() != "":
         rm_alvo = str(buscar_rm).strip()
         rm_parametro = int(rm_alvo) if rm_alvo.isdigit() else rm_alvo
@@ -16,7 +16,7 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
         res_pc = supabase.table("pedido_compra").select("*").eq("rm", str(rm_alvo)).execute()
         df_pc_bruto = pd.DataFrame(res_pc.data)
 
-    # Rota B: Busca isolada por número do PC
+    # Rota B: Busca isolada por número do PC - TOTALMENTE PRESERVADO
     elif buscar_pc and str(buscar_pc).strip() != "":
         pc_alvo = str(buscar_pc).strip()
         
@@ -28,7 +28,7 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
             res_rm = supabase.table("vw_approvo_rm").select("*").in_("rm", lista_rms_pontes).execute()
             df_rm_bruto = pd.DataFrame(res_rm.data)
 
-    # Rota C: Fluxo de Filtros Combinados Globais
+    # Rota C: Fluxo de Filtros Combinados Globais (Onde o filtro do comprador Thais é corrigido!)
     else:
         # 1. Puxa as RMs filtradas (Blocos REQUISICAO e APPROVAL RM totalmente preservados!)
         query_rm = supabase.table("vw_approvo_rm").select("*")
@@ -39,31 +39,43 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
         res_rm = query_rm.limit(1000).execute()
         df_rm_bruto = pd.DataFrame(res_rm.data)
 
-        # 2. Puxa a tabela física pedido_compra (Bloco PEDIDO DE COMPRA MEGA totalmente preservado!)
+        # 2. 🌟 BUSCA COMERCIAL DUPLA INTELIGENTE:
+        # Puxa os dados da tabela pedido_compra olhando as RMs da tela OU o comprador digitado diretamente!
         query_pc = supabase.table("pedido_compra").select("*")
-        if filtro_comp != "Todos" and str(filtro_comp).strip() != "":
-            query_pc = query_pc.ilike("comprador", f"%{str(filtro_comp).strip()}%")
         
+        lista_rms_finais = []
         if not df_rm_bruto.empty and "rm" in df_rm_bruto.columns:
             lista_rms_finais = [str(x).replace('.0', '').strip() for x in df_rm_bruto["rm"].unique() if pd.notna(x) and str(x).strip() != ""]
-            if lista_rms_finais:
-                query_pc = query_pc.in_("rm", lista_rms_finais)
-                
+
+        # Se o usuário digitou um comprador específico (Ex: Thais)
+        if filtro_comp != "Todos" and str(filtro_comp).strip() != "":
+            comp_alvo = str(filtro_comp).strip()
+            # Varre os registros do comprador na tabela pedido_compra
+            query_pc = query_pc.ilike("comprador", f"%{comp_alvo}%")
+        # Caso contrário, se houver RMs na tela, filtra o lote delas nativamente para cache
+        elif lista_rms_finais:
+            query_pc = query_pc.in_("rm", lista_rms_finais)
+            
         res_pc = query_pc.limit(1000).execute()
         df_pc_bruto = pd.DataFrame(res_pc.data)
 
-    # 🌟 CAMADA ISOLADA DE REPARO: Extração tratada como string para não quebrar o cache do Approval PC
+        # 🌟 COMPLEMENTO DE BACKUP OPERACIONAL PARA BUSCA DE REQUISITANTE CONTIDO:
+        # Se você buscou o comprador Thais mas as RMs dele vieram vazias por serem NULL no comprador do banco,
+        # faz uma segunda varredura reversa para resgatar os pares de RMs legítimos e não dar tela em branco!
+        if df_pc_bruto.empty and filtro_comp != "Todos" and lista_rms_finais:
+            res_pc_backup = supabase.table("pedido_compra").select("*").in_("rm", lista_rms_finais).limit(1000).execute()
+            df_pc_bruto = pd.DataFrame(res_pc_backup.data)
+
+    # Camada isolada de cache para o Approval PC por número de pedido - TOTALMENTE PRESERVADO
     lista_peds_cache = []
     if not df_pc_bruto.empty and "pedido" in df_pc_bruto.columns:
-        # Arranca o '.0' de flutuantes e remove espaços das pontas com segurança textual total
         lista_peds_cache = [str(x).replace('.0', '').strip() for x in df_pc_bruto["pedido"].unique() if pd.notna(x) and str(x).strip() != ""]
         
     if lista_peds_cache:
-        # Busca direta e isolada na visão de aprovações do PC do Supabase
         res_vinculo = supabase.table("vw_approvo_pc").select("*").in_("pedido", lista_peds_cache).execute()
         df_vinculo = pd.DataFrame(res_vinculo.data)
 
-    # Inicialização uniforme das colunas técnicas do Pandas
+    # Inicialização uniforme das strings de acoplamento do Pandas
     if not df_rm_bruto.empty and "rm" in df_rm_bruto.columns:
         df_rm_bruto["rm_str"] = df_rm_bruto["rm"].astype(str).str.replace('.0', '', regex=False).str.strip()
         df_rm_bruto["mat_str"] = df_rm_bruto["mat"].astype(str).str.replace('.0', '', regex=False).str.strip()
