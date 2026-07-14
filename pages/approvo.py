@@ -73,7 +73,7 @@ if not tem_filtro_ativo:
     st.stop()
 
 with st.spinner("Processando árvore de suprimentos..."):
-    df_rm, df_pc, df_vinculo = executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filtro_comp, filtro_status_rm, filtro_status_pc)
+    df_rm, df_pc, df_vinculo = executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filtro_comp, filtro_status_rm, filtro_status_pc, filtro_periodo)
 
 if df_rm.empty and df_pc.empty:
     st.warning("⚠️ Nenhum registro correspondente aos critérios foi localizado no banco de dados.")
