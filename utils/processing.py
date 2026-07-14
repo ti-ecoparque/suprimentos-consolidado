@@ -4,7 +4,7 @@ import datetime
 def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, buscar_pc, filtro_req, filtro_comp, filtro_status_pc, filtro_periodo):
     cols_exclusivas_rm = ["nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "rm_str", "mat_str", "seq_item"]
 
-    # 1. Higienização estrita das RMs da esquerda (MANTIDO INTACTO E SEGURO)
+    # 1. Higienização das RMs da esquerda (MANTIDO INTACTO E SEGURO)
     df_rm_limpo = pd.DataFrame(index=df_rm_bruto.index)
     for c in df_rm_bruto.columns:
         if c in cols_exclusivas_rm:
@@ -39,13 +39,13 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     if "mat_str" not in df_pc_limpo.columns: df_pc_limpo["mat_str"] = "---"
     if "rm_str" not in df_pc_limpo.columns: df_pc_limpo["rm_str"] = "---"
     df_pc_limpo.rename(columns={"comprador_limpo": "comprador", "entrega_limpa": "entrega"}, inplace=True, errors="ignore")
-    
-    # 🌟 SALVA A INTEGRIDADE: Garante linhas exclusivas mapeadas por RM e Material para não triplicar itens
     df_pc_limpo = df_pc_limpo.drop_duplicates(subset=["rm_str", "mat_str"]).copy()
 
-    # 🌟 A ANCORA DA VITÓRIA: O cruzamento volta a exigir obrigatoriamente a RM E o Material juntos!
-    # Isso destrava as sub-linhas da Karolina, do PCP e traz todos os pedidos de volta no ato!
+    # O cruzamento exige obrigatoriamente a RM e o Material juntos (Trava de Segurança Antiduplicidade)
     df_final = pd.merge(df_rm_limpo, df_pc_limpo, on=["rm_str", "mat_str"], how="left")
+
+    if "mat_str_x" in df_final.columns:
+        df_final["mat_str"] = df_final["mat_str_x"]
 
     # 3. Injeção isolada em segundo plano do APPROVAL PC (TOTALMENTE PRESERVADO)
     if not df_vinculo.empty and "pedido_str" in df_final.columns:
@@ -85,10 +85,11 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
 
     df_final = df_final.drop_duplicates(subset=["linha_id"]).copy()
 
-    # Extração segura de datas do calendário
+    # 📐 EXTRAÇÃO TRATADA POR ÍNDICES DA TUPLA DO CALENDÁRIO
     possui_intervalo_valido = isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2
-    data_inicio_filtro = filtro_periodo if possui_intervalo_valido else None
-    data_fim_filtro = filtro_periodo if possui_intervalo_valido else None
+    # 🌟 CORREÇÃO DO INDICE: Coleta as instâncias de datetime primitivas sem converter para strings cruas!
+    data_inicio_filtro = filtro_periodo[0] if possui_intervalo_valido else None
+    data_fim_filtro = filtro_periodo[1] if possui_intervalo_valido else None
     ignorar_calendario = (buscar_rm != "") or (buscar_pc != "")
 
     lista_alertas_data, lista_entrega_dt_bruta, lista_necessidade_dt_bruta, indices_para_manter = [], [], [], []
