@@ -73,7 +73,7 @@ if not tem_filtro_ativo:
     st.stop()
 
 with st.spinner("Processando árvore de suprimentos..."):
-    # Passagem parametrizada explícita para evitar colisões
+    # 🌟 CORREÇÃO CIRÚRGICA: Removido o filtro_periodo daqui para bater exatamente com sua query antiga!
     df_rm, df_pc, df_vinculo = executar_consultas_supabase(
         supabase=supabase, 
         buscar_rm=buscar_rm, 
@@ -81,15 +81,14 @@ with st.spinner("Processando árvore de suprimentos..."):
         filtro_req=filtro_req, 
         filtro_comp=filtro_comp, 
         filtro_status_rm=filtro_status_rm, 
-        filtro_status_pc=filtro_status_pc,
-        filtro_periodo=filtro_periodo
+        filtro_status_pc=filtro_status_pc
     )
 
 if df_rm.empty and df_pc.empty:
     st.warning("⚠️ Nenhum registro correspondente aos critérios foi localizado no banco de dados.")
     st.stop()
 
-# 🌟 CONEXÃO PROTEGIDA POR NOMES EXPLICITOS: Impede o descolamento de variáveis no Pandas!
+# Envia os dados higienizados para o processamento original
 df_final, lista_ent, lista_nec = processar_e_unificar_dados(
     df_rm_bruto=df_rm, 
     df_pc_bruto=df_pc, 
