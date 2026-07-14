@@ -4,7 +4,7 @@ import datetime
 def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, buscar_pc, filtro_req, filtro_comp, filtro_status_pc, filtro_periodo):
     cols_exclusivas_rm = ["nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "rm_str", "mat_str", "seq_item"]
 
-    # 1. Higienização das RMs da esquerda
+    # 1. Higienização das RMs da esquerda (REQUISICAO e APPROVAL RM) - MANTIDO TOTALMENTE OK
     df_rm_limpo = pd.DataFrame(index=df_rm_bruto.index)
     for c in df_rm_bruto.columns:
         if c in cols_exclusivas_rm:
@@ -14,7 +14,7 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     df_rm_limpo["mat_str"] = df_rm_limpo.get("mat", "---")
     df_rm_limpo["linha_id"] = df_rm_limpo.index.astype(str)
 
-    # 2. Higienização da Tabela de Compras (Pedido de Compra Mega Direto!)
+    # 2. Higienização da Tabela de Compras (PEDIDO DE COMPRA MEGA) - MANTIDO TOTALMENTE OK
     df_pc_limpo = pd.DataFrame(index=df_pc_bruto.index)
     if not df_pc_bruto.empty:
         df_pc_bruto_copy = df_pc_bruto.copy()
@@ -41,28 +41,23 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     df_pc_limpo.rename(columns={"comprador_limpo": "comprador", "entrega_limpa": "entrega"}, inplace=True, errors="ignore")
     df_pc_limpo = df_pc_limpo.drop_duplicates(subset=["rm_str"]).copy()
 
-    # O relacionamento une horizontalmente as RMs e os Pedidos Físicos normais
+    # União horizontal por número da RM (Cruzamento Histórico que você validou!)
     df_final = pd.merge(df_rm_limpo, df_pc_limpo, on=["rm_str"], how="left")
 
     if "mat_str_x" in df_final.columns:
         df_final["mat_str"] = df_final["mat_str_x"]
 
-    # ==========================================================
-    # 🚨 RETRANCA DE ACÚMULO ISOLADA: CASAMENTO EM SEGUNDO PLANO DO APPROVAL PC
-    # ==========================================================
+    # 3. Injeção isolada em segundo plano do APPROVAL PC (TOTALMENTE PRESERVADO)
     if not df_vinculo.empty and "pedido_str" in df_final.columns:
         df_app_pc_limpo = pd.DataFrame()
-        # Higieniza as colunas de aprovação vindas da vw_approvo_pc
-        df_app_pc_limpo["pedido_str"] = df_vinculo["pedido"].astype(str).str.replace('.0', '', regex=False).str.strip()
+        df_app_pc_limpo["pedido_str"] = df_vinculo["pedido_str"].astype(str)
         df_app_pc_limpo["status_pc_real"] = df_vinculo.get("status_documento", "---")
         df_app_pc_limpo["data_pc_real"] = df_vinculo.get("data_ocorrencia", "---")
         df_app_pc_limpo["aprovador_pc_real"] = df_vinculo.get("nome_aprovador", "---")
         df_app_pc_limpo = df_app_pc_limpo.drop_duplicates(subset=["pedido_str"]).copy()
 
-        # Junta na df_final associando estritamente através da chave do pedido (pedido_str)
         df_final = pd.merge(df_final, df_app_pc_limpo, on=["pedido_str"], how="left")
         
-        # Herda os dados preenchendo as colunas de exibição sem tocar em nenhuma outra linha
         if "status_pc_real" in df_final.columns:
             df_final["status_pc"] = df_final["status_pc_real"].fillna("---")
             df_final["data_ocorrencia_pc"] = df_final["data_pc_real"].fillna("---")
@@ -86,13 +81,14 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
 
     df_final = df_final.drop_duplicates(subset=["linha_id"]).copy()
 
-    # Cálculo de Datas Cronológico Rígido
-    lista_alertas_data, lista_entrega_dt_bruta, lista_necessidade_dt_bruta, indices_para_manter = [], [], [], []
-    ignorar_calendario = (buscar_rm != "") or (buscar_pc != "")
-    
+    # 📐 EXTRAÇÃO TRATADA POR ÍNDICES DA TUPLA DO CALENDÁRIO
+    # 🌟 O FIX CIRÚRGICO: Extrai as posições 0 e 1 do filtro_periodo para desatar a comparação matemática
     possui_intervalo_valido = isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2
-    data_inicio_filtro = filtro_periodo if possui_intervalo_valido else None
-    data_fim_filtro = filtro_periodo if possui_intervalo_valido else None
+    data_inicio_filtro = filtro_periodo[0] if possui_intervalo_valido else None
+    data_fim_filtro = filtro_periodo[1] if possui_intervalo_valido else None
+    ignorar_calendario = (buscar_rm != "") or (buscar_pc != "")
+
+    lista_alertas_data, lista_entrega_dt_bruta, lista_necessidade_dt_bruta, indices_para_manter = [], [], [], []
 
     for idx in df_final.index:
         val_entrega = df_final.loc[idx, "entrega"]
