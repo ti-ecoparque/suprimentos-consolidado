@@ -73,28 +73,38 @@ if not tem_filtro_ativo:
     st.stop()
 
 with st.spinner("Processando árvore de suprimentos..."):
-    df_rm, df_pc, df_vinculo = executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filtro_comp, filtro_status_rm, filtro_status_pc, filtro_periodo)
+    # Passagem parametrizada explícita para evitar colisões
+    df_rm, df_pc, df_vinculo = executar_consultas_supabase(
+        supabase=supabase, 
+        buscar_rm=buscar_rm, 
+        buscar_pc=buscar_pc, 
+        filtro_req=filtro_req, 
+        filtro_comp=filtro_comp, 
+        filtro_status_rm=filtro_status_rm, 
+        filtro_status_pc=filtro_status_pc,
+        filtro_periodo=filtro_periodo
+    )
 
 if df_rm.empty and df_pc.empty:
     st.warning("⚠️ Nenhum registro correspondente aos critérios foi localizado no banco de dados.")
     st.stop()
 
-# 🌟 CONEXÃO MATEMÁTICA PERFEITA: Variáveis batendo exatamente com a ordem do seu processing.py!
+# 🌟 CONEXÃO PROTEGIDA POR NOMES EXPLICITOS: Impede o descolamento de variáveis no Pandas!
 df_final, lista_ent, lista_nec = processar_e_unificar_dados(
-    df_rm, 
-    df_pc, 
-    df_vinculo, 
-    buscar_rm, 
-    buscar_pc, 
-    filtro_req, 
-    filtro_comp, 
-    filtro_status_pc, 
-    filtro_periodo
+    df_rm_bruto=df_rm, 
+    df_pc_bruto=df_pc, 
+    df_vinculo=df_vinculo, 
+    buscar_rm=buscar_rm, 
+    buscar_pc=buscar_pc, 
+    filtro_req=filtro_req, 
+    filtro_comp=filtro_comp, 
+    filtro_status_pc=filtro_status_pc, 
+    filtro_periodo=filtro_periodo
 )
 
 if df_final.empty:
     st.warning("⚠️ Nenhum registro localizado para o período filtrado.")
     st.stop()
 
-# Renderiza o botão de exportar na coluna da direita e o grid abaixo
+# Renderiza a barra simétrica de botões e o grid abaixo
 renderizar_grid_multiindex_colorido(df_final, lista_ent, lista_nec, col_btn_direita)
