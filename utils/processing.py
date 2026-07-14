@@ -39,13 +39,34 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     if "mat_str" not in df_pc_limpo.columns: df_pc_limpo["mat_str"] = "---"
     if "rm_str" not in df_pc_limpo.columns: df_pc_limpo["rm_str"] = "---"
     df_pc_limpo.rename(columns={"comprador_limpo": "comprador", "entrega_limpa": "entrega"}, inplace=True, errors="ignore")
-    df_pc_limpo = df_pc_limpo.drop_duplicates().copy()
+    df_pc_limpo = df_pc_limpo.drop_duplicates(subset=["rm_str"]).copy()
 
-    # Realiza a junção por RM e força um cruzamento tolerante por Left Join externo
+    # O relacionamento une horizontalmente as RMs e os Pedidos Físicos normais
     df_final = pd.merge(df_rm_limpo, df_pc_limpo, on=["rm_str"], how="left")
 
     if "mat_str_x" in df_final.columns:
         df_final["mat_str"] = df_final["mat_str_x"]
+
+    # ==========================================================
+    # 🚨 RETRANCA DE ACÚMULO ISOLADA: CASAMENTO EM SEGUNDO PLANO DO APPROVAL PC
+    # ==========================================================
+    if not df_vinculo.empty and "pedido_str" in df_final.columns:
+        df_app_pc_limpo = pd.DataFrame()
+        # Higieniza as colunas de aprovação vindas da vw_approvo_pc
+        df_app_pc_limpo["pedido_str"] = df_vinculo["pedido"].astype(str).str.replace('.0', '', regex=False).str.strip()
+        df_app_pc_limpo["status_pc_real"] = df_vinculo.get("status_documento", "---")
+        df_app_pc_limpo["data_pc_real"] = df_vinculo.get("data_ocorrencia", "---")
+        df_app_pc_limpo["aprovador_pc_real"] = df_vinculo.get("nome_aprovador", "---")
+        df_app_pc_limpo = df_app_pc_limpo.drop_duplicates(subset=["pedido_str"]).copy()
+
+        # Junta na df_final associando estritamente através da chave do pedido (pedido_str)
+        df_final = pd.merge(df_final, df_app_pc_limpo, on=["pedido_str"], how="left")
+        
+        # Herda os dados preenchendo as colunas de exibição sem tocar em nenhuma outra linha
+        if "status_pc_real" in df_final.columns:
+            df_final["status_pc"] = df_final["status_pc_real"].fillna("---")
+            df_final["data_ocorrencia_pc"] = df_final["data_pc_real"].fillna("---")
+            df_final["nome_aprovador_pc"] = df_final["aprovador_pc_real"].fillna("---")
 
     todas_colunas_vitais = ["nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "rm_str", "mat_str", "pedido_str", "comprador", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc", "linha_id"]
     for col in todas_colunas_vitais:
@@ -69,10 +90,9 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     lista_alertas_data, lista_entrega_dt_bruta, lista_necessidade_dt_bruta, indices_para_manter = [], [], [], []
     ignorar_calendario = (buscar_rm != "") or (buscar_pc != "")
     
-    # 🌟 O FIX DEFINITIVO DO CALENDÁRIO: Extrai individualmente os índices 0 e 1 da tupla!
     possui_intervalo_valido = isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2
-    data_inicio_filtro = filtro_periodo[0] if possui_intervalo_valido else None
-    data_fim_filtro = filtro_periodo[1] if possui_intervalo_valido else None
+    data_inicio_filtro = filtro_periodo if possui_intervalo_valido else None
+    data_fim_filtro = filtro_periodo if possui_intervalo_valido else None
 
     for idx in df_final.index:
         val_entrega = df_final.loc[idx, "entrega"]
