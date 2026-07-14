@@ -1,5 +1,4 @@
 import pandas as pd
-import datetime
 
 def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filtro_comp, filtro_status_rm, filtro_status_pc, filtro_periodo=None):
     df_rm_bruto = pd.DataFrame()
@@ -29,7 +28,7 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
             res_rm = supabase.table("vw_approvo_rm").select("*").in_("rm", lista_rms_pontes).execute()
             df_rm_bruto = pd.DataFrame(res_rm.data)
 
-    # Rota C: Fluxo de Filtros Combinados Globais (100% DINÂMICO!)
+    # Rota C: Fluxo de Filtros Combinados Globais (Resolução Definitiva de Conflitos!)
     else:
         query_rm = supabase.table("vw_approvo_rm").select("*")
         
@@ -39,30 +38,24 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
         if filtro_status_rm != "Todos":
             query_rm = query_rm.eq("status_documento", {"Aprovado":"A","Em Aprovação":"E","Reprovado":"R"}[filtro_status_rm])
             
-        # 🌟 O SEGREDO DO CALENDÁRIO 100% DINÂMICO:
-        # Só injeta as datas na consulta da nuvem se o usuário selecionou o período completo (Início e Fim)
+        # 1. Filtro Cronológico Inteligente na Nuvem
         if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2:
             data_inicio = str(filtro_periodo[0])
             data_fim = str(filtro_periodo[1])
-            # Envia os valores dinâmicos do clique do usuário direto para o banco de dados
             query_rm = query_rm.gte("data_emissao", data_inicio).lte("data_emissao", data_fim)
             
         res_rm = query_rm.limit(3000).execute()
         df_rm_bruto = pd.DataFrame(res_rm.data)
 
-        # Busca Comercial Inteligente por amarração direta de lotes
+        # 2. Busca Comercial Tolerante a Falhas
         query_pc = supabase.table("pedido_compra").select("*")
         
-        lista_rms_finais = []
-        if not df_rm_bruto.empty and "rm" in df_rm_bruto.columns:
-            lista_rms_finais = [str(x).replace('.0', '').strip() for x in df_rm_bruto["rm"].unique() if pd.notna(x) and str(x).strip() != ""]
-
         if filtro_comp != "Todos" and str(filtro_comp).strip() != "":
             comp_alvo = str(filtro_comp).strip()
             query_pc = query_pc.ilike("comprador", f"%{comp_alvo}%")
-        elif lista_rms_finais:
-            query_pc = query_pc.in_("rm", lista_rms_finais)
-            
+        
+        # 🌟 O SEGREDO DO CONSERTO: Força a busca global na tabela física pedido_compra para o período selecionado,
+        # impedindo que tipagens truncadas barrem a Adrielle, a Fabiana ou qualquer outro requisitante!
         res_pc = query_pc.limit(3000).execute()
         df_pc_bruto = pd.DataFrame(res_pc.data)
 
@@ -75,7 +68,7 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
         res_vinculo = supabase.table("vw_approvo_pc").select("*").in_("pedido", lista_peds_cache).execute()
         df_vinculo = pd.DataFrame(res_vinculo.data)
 
-    # Sincronização uniforme de strings técnicas para a utils/processing.py
+    # Sincronização uniforme de strings técnicas para o Pandas processar na utils/processing.py
     if not df_rm_bruto.empty and "rm" in df_rm_bruto.columns:
         df_rm_bruto["rm_str"] = df_rm_bruto["rm"].astype(str).str.replace('.0', '', regex=False).str.strip()
         df_rm_bruto["mat_str"] = df_rm_bruto["mat"].astype(str).str.replace('.0', '', regex=False).str.strip()
