@@ -14,12 +14,11 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     df_rm_limpo["mat_str"] = df_rm_limpo.get("mat", "---")
     df_rm_limpo["linha_id"] = df_rm_limpo.index.astype(str)
 
-    # 2. Higienização da Tabela de Compras (Pedido de Compra Mega Direto!)
+    # 2. Higienização da Tabela Comercial (Pedido de Compra Mega Direto!)
     df_pc_limpo = pd.DataFrame(index=df_pc_bruto.index)
     if not df_pc_bruto.empty:
         df_pc_bruto_copy = df_pc_bruto.copy()
         df_pc_bruto_copy["pedido_str"] = df_pc_bruto_copy.get("pedido", "---").astype(str).str.replace('.0', '', regex=False).str.strip()
-        df_pc_bruto_copy["mat_str"] = df_pc_bruto_copy.get("mat", "---").astype(str).str.replace('.0', '', regex=False).str.strip()
         df_pc_bruto_copy["rm_str"] = df_pc_bruto_copy.get("rm", "---").astype(str).str.replace('.0', '', regex=False).str.strip()
         df_pc_bruto_copy["comprador_limpo"] = df_pc_bruto_copy.get("comprador", "---")
         df_pc_bruto_copy["entrega_limpa"] = df_pc_bruto_copy.get("entrega", "---")
@@ -29,20 +28,21 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
         df_pc_bruto_copy["data_ocorrencia_pc"] = "---"
         df_pc_bruto_copy["nome_aprovador_pc"] = "---"
 
-        cols_finais_pc = ["pedido_str", "mat_str", "rm_str", "comprador_limpo", "entrega_limpa", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"]
+        cols_finais_pc = ["pedido_str", "rm_str", "comprador_limpo", "entrega_limpa", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"]
         for c in df_pc_bruto_copy.columns:
             if c in cols_finais_pc:
                 s = df_pc_bruto_copy[c].iloc[:, 0] if isinstance(df_pc_bruto_copy[c], pd.DataFrame) else df_pc_bruto_copy[c]
                 df_pc_limpo[c] = s.fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
 
     if "pedido_str" not in df_pc_limpo.columns: df_pc_limpo["pedido_str"] = "---"
-    if "mat_str" not in df_pc_limpo.columns: df_pc_limpo["mat_str"] = "---"
     if "rm_str" not in df_pc_limpo.columns: df_pc_limpo["rm_str"] = "---"
     df_pc_limpo.rename(columns={"comprador_limpo": "comprador", "entrega_limpa": "entrega"}, inplace=True, errors="ignore")
-    df_pc_limpo = df_pc_limpo.drop_duplicates(subset=["rm_str", "mat_str"]).copy()
+    
+    # 🌟 TRAVA ANTIDUPLICAÇÃO EXTRA: Remove duplicados olhando estritamente a RM na tabela de compras
+    df_pc_limpo = df_pc_limpo.drop_duplicates(subset=["rm_str"]).copy()
 
-    # O cruzamento amarra os dados unificando por RM e Material diretamente da tabela física!
-    df_final = pd.merge(df_rm_limpo, df_pc_limpo, on=["rm_str", "mat_str"], how="left")
+    # 🌟 O CRUZAMENTO ABSOLUTO: Une horizontalmente os dados olhando ÚNICA e EXCLUSIVAMENTE o número da RM (rm_str)!
+    df_final = pd.merge(df_rm_limpo, df_pc_limpo, on=["rm_str"], how="left")
 
     todas_colunas_vitais = ["nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "rm_str", "mat_str", "pedido_str", "comprador", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc", "linha_id"]
     for col in todas_colunas_vitais:
@@ -52,7 +52,7 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     df_final["comprador"] = df_final["comprador"].fillna("---").astype(str).str.strip()
     df_final["quantidade_comprada"] = df_final["quantidade_comprada"].replace("---", "None")
 
-    # Filtros contains rápidos da interface
+    # Filtros textuais via contains rápidos
     if buscar_rm:
         df_final = df_final[df_final["rm"].astype(str).str.contains(str(buscar_rm).strip(), na=False, regex=False)]
     if filtro_req != "Todos":
@@ -66,7 +66,6 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     lista_alertas_data, lista_entrega_dt_bruta, lista_necessidade_dt_bruta, indices_para_manter = [], [], [], []
     ignorar_calendario = (buscar_rm != "") or (buscar_pc != "")
     
-    # 🌟 EXTRAÇÃO FATIADA DAS POSIÇÕES DA LISTA DO CALENDÁRIO:
     possui_intervalo_valido = isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2
     data_inicio_filtro = filtro_periodo[0] if possui_intervalo_valido else None
     data_fim_filtro = filtro_periodo[1] if possui_intervalo_valido else None
