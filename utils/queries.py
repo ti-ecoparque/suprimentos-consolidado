@@ -13,8 +13,7 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
         res_rm = supabase.table("vw_approvo_rm").select("*").eq("rm", rm_parametro).limit(500).execute()
         df_rm_bruto = pd.DataFrame(res_rm.data)
         
-        # Busca direta na tabela física com os dados comerciais integrados
-        res_pc = supabase.table("pedido_compra").select("*").eq("rm", int(rm_alvo) if rm_alvo.isdigit() else 0).execute()
+        res_pc = supabase.table("pedido_compra").select("*").eq("rm", str(rm_alvo)).execute()
         df_pc_bruto = pd.DataFrame(res_pc.data)
 
     # Rota B: Busca isolada por número do PC
@@ -24,13 +23,14 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
         res_pc = supabase.table("pedido_compra").select("*").eq("pedido", int(pc_alvo) if pc_alvo.isdigit() else 0).execute()
         df_pc_bruto = pd.DataFrame(res_pc.data)
         
-        lista_rms_pontes = [int(float(x)) for x in df_pc_bruto["rm"].unique() if pd.notna(x)] if "rm" in df_pc_bruto.columns else []
+        lista_rms_pontes = [str(x).replace('.0', '').strip() for x in df_pc_bruto["rm"].unique() if pd.notna(x)] if "rm" in df_pc_bruto.columns else []
         if lista_rms_pontes:
             res_rm = supabase.table("vw_approvo_rm").select("*").in_("rm", lista_rms_pontes).execute()
             df_rm_bruto = pd.DataFrame(res_rm.data)
 
-    # Rota C: Fluxo de Filtros Combinados Globais
+    # Rota C: Fluxo de Filtros Combinados Globais (Onde o lote da Adrielle é consertado!)
     else:
+        # 1. Puxa as RMs filtradas pelo requisitante digitado (Ex: Adri)
         query_rm = supabase.table("vw_approvo_rm").select("*")
         if filtro_req != "Todos" and str(filtro_req).strip() != "":
             query_rm = query_rm.ilike("nome_solicitante", f"%{str(filtro_req).strip()}%")
@@ -39,14 +39,24 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
         res_rm = query_rm.limit(1000).execute()
         df_rm_bruto = pd.DataFrame(res_rm.data)
 
-        # 🌟 BUSCA COMERCIAL DIRETA: Puxa o lote da tabela física pedido_compra aplicando o filtro de comprador
-        query_pc = supabase.table("pedido_compra").select("*")
-        if filtro_comp != "Todos" and str(filtro_comp).strip() != "":
-            query_pc = query_pc.ilike("comprador", f"%{str(filtro_comp).strip()}%")
-        res_pc = query_pc.limit(2000).execute()
-        df_pc_bruto = pd.DataFrame(res_pc.data)
+        # 2. 🌟 EXTRAÇÃO COM TIPAGEM CORRETA DE TEXTO:
+        # Coleta os números de RMs puramente como strings textuais limpas, arrancando o '.0'
+        if not df_rm_bruto.empty and "rm" in df_rm_bruto.columns:
+            lista_rms_finais = [str(x).replace('.0', '').strip() for x in df_rm_bruto["rm"].unique() if pd.notna(x) and str(x).strip() != ""]
+            
+            if lista_rms_finais:
+                # 🌟 CASAMENTO DE TEXTO PERFEITO: Envia strings textuais para a coluna varchar do banco,
+                # garantindo que o Supabase encontre as linhas e preencha a memória RAM na hora!
+                res_pc = supabase.table("pedido_compra").select("*").in_("rm", lista_rms_finais).limit(1000).execute()
+                df_pc_bruto = pd.DataFrame(res_pc.data)
+        else:
+            query_pc = supabase.table("pedido_compra").select("*")
+            if filtro_comp != "Todos" and str(filtro_comp).strip() != "":
+                query_pc = query_pc.ilike("comprador", f"%{str(filtro_comp).strip()}%")
+            res_pc = query_pc.limit(1000).execute()
+            df_pc_bruto = pd.DataFrame(res_pc.data)
 
-    # Inicialização uniforme das strings técnicas para o Pandas
+    # Inicialização uniforme das strings de acoplamento do Pandas para o Outer Join
     if not df_rm_bruto.empty and "rm" in df_rm_bruto.columns:
         df_rm_bruto["rm_str"] = df_rm_bruto["rm"].astype(str).str.replace('.0', '', regex=False).str.strip()
         df_rm_bruto["mat_str"] = df_rm_bruto["mat"].astype(str).str.replace('.0', '', regex=False).str.strip()
