@@ -41,10 +41,9 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     df_pc_limpo.rename(columns={"comprador_limpo": "comprador", "entrega_limpa": "entrega"}, inplace=True, errors="ignore")
     df_pc_limpo = df_pc_limpo.drop_duplicates().copy()
 
-    # 🌟 O SEGREDO DO CONSERTO: Realiza a junção por RM e força um cruzamento tolerante por Left Join externo
+    # Realiza a junção por RM e força um cruzamento tolerante por Left Join externo
     df_final = pd.merge(df_rm_limpo, df_pc_limpo, on=["rm_str"], how="left")
 
-    # Ajuste de segurança caso haja conflito de colunas de materiais geradas pelo Pandas
     if "mat_str_x" in df_final.columns:
         df_final["mat_str"] = df_final["mat_str_x"]
 
@@ -70,9 +69,10 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     lista_alertas_data, lista_entrega_dt_bruta, lista_necessidade_dt_bruta, indices_para_manter = [], [], [], []
     ignorar_calendario = (buscar_rm != "") or (buscar_pc != "")
     
+    # 🌟 O FIX DEFINITIVO DO CALENDÁRIO: Extrai individualmente os índices 0 e 1 da tupla!
     possui_intervalo_valido = isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2
-    data_inicio_filtro = filtro_periodo if possui_intervalo_valido else None
-    data_fim_filtro = filtro_periodo if possui_intervalo_valido else None
+    data_inicio_filtro = filtro_periodo[0] if possui_intervalo_valido else None
+    data_fim_filtro = filtro_periodo[1] if possui_intervalo_valido else None
 
     for idx in df_final.index:
         val_entrega = df_final.loc[idx, "entrega"]
