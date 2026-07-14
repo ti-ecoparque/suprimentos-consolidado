@@ -41,7 +41,7 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     df_pc_limpo.rename(columns={"comprador_limpo": "comprador", "entrega_limpa": "entrega"}, inplace=True, errors="ignore")
     df_pc_limpo = df_pc_limpo.drop_duplicates(subset=["rm_str"]).copy()
 
-    # União horizontal estável por chave única de RM
+    # União horizontal por chave única de RM (MANTIDO INTACTO)
     df_final = pd.merge(df_rm_limpo, df_pc_limpo, on=["rm_str"], how="left")
 
     if "mat_str_x" in df_final.columns:
@@ -77,7 +77,6 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     if filtro_req != "Todos":
         df_final = df_final[df_final["nome_solicitante"].astype(str).str.contains(str(filtro_req).strip(), na=False, regex=False)]
         
-    # 🌟 O CORREÇÃO CIRÚRGICA DA DUPLA VIA: O Pandas aceita se o nome estiver em 'comprador' OU em 'nome_aprovador_pc'
     if filtro_comp != "Todos" and str(filtro_comp).strip() != "":
         c_alvo = str(filtro_comp).strip().lower()
         cond_comprador = df_final["comprador"].astype(str).str.lower().str.contains(c_alvo, na=False)
@@ -86,10 +85,11 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
 
     df_final = df_final.drop_duplicates(subset=["linha_id"]).copy()
 
-    # Cálculo de Datas Cronológico Rígido
+    # 📐 EXTRAÇÃO SEGURA DOS ÍNDICES DA TUPLA DO CALENDÁRIO
+    # 🌟 TRAVA MÁXIMA CONTRA TYPEERROR: Só ativa as variáveis de filtro se existirem Início E Fim legítimos!
     possui_intervalo_valido = isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2
-    data_inicio_filtro = filtro_periodo if possui_intervalo_valido else None
-    data_fim_filtro = filtro_periodo if possui_intervalo_valido else None
+    data_inicio_filtro = filtro_periodo[0] if possui_intervalo_valido else None
+    data_fim_filtro = filtro_periodo[1] if possui_intervalo_valido else None
     ignorar_calendario = (buscar_rm != "") or (buscar_pc != "")
 
     lista_alertas_data, lista_entrega_dt_bruta, lista_necessidade_dt_bruta, indices_para_manter = [], [], [], []
@@ -111,6 +111,7 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
 
         dt_ent, dt_nec, dt_emi = conv(val_entrega), conv(val_necessidade), conv(val_emissao)
 
+        # Se o calendário estiver pendente ou incompleto, o Python ignora essa linha com segurança
         if data_inicio_filtro and data_fim_filtro and not ignorar_calendario:
             if dt_emi is None or not (data_inicio_filtro <= dt_emi <= data_fim_filtro): continue
 
