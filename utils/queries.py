@@ -28,9 +28,8 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
             res_rm = supabase.table("vw_approvo_rm").select("*").in_("rm", lista_rms_pontes).execute()
             df_rm_bruto = pd.DataFrame(res_rm.data)
 
-    # Rota C: Fluxo de Filtros Combinados Globais (Onde o lote da Adrielle é consertado!)
+    # Rota C: Fluxo de Filtros Combinados Globais
     else:
-        # 1. Puxa as RMs filtradas pelo requisitante digitado (Ex: Adri)
         query_rm = supabase.table("vw_approvo_rm").select("*")
         if filtro_req != "Todos" and str(filtro_req).strip() != "":
             query_rm = query_rm.ilike("nome_solicitante", f"%{str(filtro_req).strip()}%")
@@ -39,24 +38,30 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
         res_rm = query_rm.limit(1000).execute()
         df_rm_bruto = pd.DataFrame(res_rm.data)
 
-        # 2. 🌟 EXTRAÇÃO COM TIPAGEM CORRETA DE TEXTO:
-        # Coleta os números de RMs puramente como strings textuais limpas, arrancando o '.0'
+        # Coleta os dados comerciais diretamente da tabela física pedido_compra
+        query_pc = supabase.table("pedido_compra").select("*")
+        if filtro_comp != "Todos" and str(filtro_comp).strip() != "":
+            query_pc = query_pc.ilike("comprador", f"%{str(filtro_comp).strip()}%")
+        
         if not df_rm_bruto.empty and "rm" in df_rm_bruto.columns:
             lista_rms_finais = [str(x).replace('.0', '').strip() for x in df_rm_bruto["rm"].unique() if pd.notna(x) and str(x).strip() != ""]
-            
             if lista_rms_finais:
-                # 🌟 CASAMENTO DE TEXTO PERFEITO: Envia strings textuais para a coluna varchar do banco,
-                # garantindo que o Supabase encontre as linhas e preencha a memória RAM na hora!
-                res_pc = supabase.table("pedido_compra").select("*").in_("rm", lista_rms_finais).limit(1000).execute()
-                df_pc_bruto = pd.DataFrame(res_pc.data)
-        else:
-            query_pc = supabase.table("pedido_compra").select("*")
-            if filtro_comp != "Todos" and str(filtro_comp).strip() != "":
-                query_pc = query_pc.ilike("comprador", f"%{str(filtro_comp).strip()}%")
-            res_pc = query_pc.limit(1000).execute()
-            df_pc_bruto = pd.DataFrame(res_pc.data)
+                query_pc = query_pc.in_("rm", lista_rms_finais)
+                
+        res_pc = query_pc.limit(1000).execute()
+        df_pc_bruto = pd.DataFrame(res_pc.data)
 
-    # Inicialização uniforme das strings de acoplamento do Pandas para o Outer Join
+    # 🌟 A CAMADA ISOLADA DE CACHE: Busca os dados de aprovação da vw_approvo_pc para a memória RAM
+    # Se encontramos pedidos válidos na tabela física, trazemos as aprovações deles por Left Join indireto
+    lista_peds_cache = []
+    if not df_pc_bruto.empty and "pedido" in df_pc_bruto.columns:
+        lista_peds_cache = [str(int(float(x))) for x in df_pc_bruto["pedido"].unique() if pd.notna(x) and str(x).strip().replace('.0', '').isdigit()]
+        
+    if lista_peds_cache:
+        res_vinculo = supabase.table("vw_approvo_pc").select("*").in_("pedido", lista_peds_cache).execute()
+        df_vinculo = pd.DataFrame(res_vinculo.data)
+
+    # Inicialização uniforme das strings de acoplamento do Pandas
     if not df_rm_bruto.empty and "rm" in df_rm_bruto.columns:
         df_rm_bruto["rm_str"] = df_rm_bruto["rm"].astype(str).str.replace('.0', '', regex=False).str.strip()
         df_rm_bruto["mat_str"] = df_rm_bruto["mat"].astype(str).str.replace('.0', '', regex=False).str.strip()
@@ -65,5 +70,8 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
         df_pc_bruto["pedido_str"] = df_pc_bruto["pedido"].astype(str).str.replace('.0', '', regex=False).str.strip()
         df_pc_bruto["mat_str"] = df_pc_bruto["mat"].astype(str).str.replace('.0', '', regex=False).str.strip()
         df_pc_bruto["rm_str"] = df_pc_bruto["rm"].astype(str).str.replace('.0', '', regex=False).str.strip()
+
+    if not df_vinculo.empty and "pedido" in df_vinculo.columns:
+        df_vinculo["pedido_str"] = df_vinculo["pedido"].astype(str).str.replace('.0', '', regex=False).str.strip()
 
     return df_rm_bruto, df_pc_bruto, df_vinculo
