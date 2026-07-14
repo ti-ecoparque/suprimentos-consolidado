@@ -4,7 +4,7 @@ import datetime
 def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, buscar_pc, filtro_req, filtro_comp, filtro_status_pc, filtro_periodo):
     cols_exclusivas_rm = ["nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "rm_str", "mat_str", "seq_item"]
 
-    # 1. Higienização das RMs da esquerda (TOTALMENTE RESTAURADO)
+    # 1. Higienização das RMs da esquerda
     df_rm_limpo = pd.DataFrame(index=df_rm_bruto.index)
     for c in df_rm_bruto.columns:
         if c in cols_exclusivas_rm:
@@ -14,7 +14,7 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     df_rm_limpo["mat_str"] = df_rm_limpo.get("mat", "---")
     df_rm_limpo["linha_id"] = df_rm_limpo.index.astype(str)
 
-    # 2. Higienização da Tabela de Compras (TOTALMENTE RESTAURADO)
+    # 2. Higienização da Tabela de Compras (Pedido de Compra Mega Físico)
     df_pc_limpo = pd.DataFrame(index=df_pc_bruto.index)
     if not df_pc_bruto.empty:
         df_pc_bruto_copy = df_pc_bruto.copy()
@@ -41,13 +41,13 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     df_pc_limpo.rename(columns={"comprador_limpo": "comprador", "entrega_limpa": "entrega"}, inplace=True, errors="ignore")
     df_pc_limpo = df_pc_limpo.drop_duplicates(subset=["rm_str"]).copy()
 
-    # União horizontal original por número da RM (MANTIDO INTACTO E SEGURO)
+    # União horizontal original por número da RM (MANTIDO INTACTO E OK)
     df_final = pd.merge(df_rm_limpo, df_pc_limpo, on=["rm_str"], how="left")
 
     if "mat_str_x" in df_final.columns:
         df_final["mat_str"] = df_final["mat_str_x"]
 
-    # 3. Injeção isolada em segundo plano do APPROVAL PC (TOTALMENTE RESTAURADO)
+    # 3. Injeção isolada em segundo plano do APPROVAL PC (TOTALMENTE PRESERVADO)
     if not df_vinculo.empty and "pedido_str" in df_final.columns:
         df_app_pc_limpo = pd.DataFrame()
         df_app_pc_limpo["pedido_str"] = df_vinculo["pedido_str"].astype(str)
@@ -71,21 +71,15 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     df_final["comprador"] = df_final["comprador"].fillna("---").astype(str).str.strip().replace("nan", "---")
     df_final["quantidade_comprada"] = df_final["quantidade_comprada"].replace("---", "None")
 
-    # Filtros contains dinâmicos da interface
+    # Filtros textuais contains da interface
     if buscar_rm:
         df_final = df_final[df_final["rm"].astype(str).str.contains(str(buscar_rm).strip(), na=False, regex=False)]
     if filtro_req != "Todos":
         df_final = df_final[df_final["nome_solicitante"].astype(str).str.contains(str(filtro_req).strip(), na=False, regex=False)]
-        
-    if filtro_comp != "Todos" and str(filtro_comp).strip() != "":
-        c_alvo = str(filtro_comp).strip().lower()
-        cond_comprador = df_final["comprador"].astype(str).str.lower().str.contains(c_alvo, na=False)
-        cond_aprovador = df_final["nome_aprovador_pc"].astype(str).str.lower().str.contains(c_alvo, na=False)
-        df_final = df_final[cond_comprador | cond_aprovador]
 
     df_final = df_final.drop_duplicates(subset=["linha_id"]).copy()
 
-    # 📐 TRAVA DE CALENDÁRIO COM VERIFICAÇÃO SEGURO CONTRA TYPEERROR (MANTIDO INTACTO)
+    # Trava de calendário estável original
     lista_alertas_data, lista_entrega_dt_bruta, lista_necessidade_dt_bruta, indices_para_manter = [], [], [], []
     ignorar_calendario = (buscar_rm != "") or (buscar_pc != "")
 
@@ -106,7 +100,6 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
 
         dt_ent, dt_nec, dt_emi = conv(val_entrega), conv(val_necessidade), conv(val_emissao)
 
-        # 🌟 O FIX SEGURO: Validação baseada na estrutura original do Pandas, imune a erros
         if isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2 and not ignorar_calendario:
             dt_ini_filtro = filtro_periodo[0]
             dt_fim_filtro = filtro_periodo[1]
