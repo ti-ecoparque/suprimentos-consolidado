@@ -4,7 +4,7 @@ import datetime
 def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, buscar_pc, filtro_req, filtro_comp, filtro_status_pc, filtro_periodo):
     cols_exclusivas_rm = ["nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "rm_str", "mat_str", "seq_item"]
 
-    # 1. Higienização das RMs da esquerda (MANTIDO INTACTO E SEGURO)
+    # 1. Higienização das RMs da esquerda (REQUISICAO e APPROVAL RM) - TOTALMENTE PRESERVADO
     df_rm_limpo = pd.DataFrame(index=df_rm_bruto.index)
     for c in df_rm_bruto.columns:
         if c in cols_exclusivas_rm:
@@ -14,12 +14,11 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
     df_rm_limpo["mat_str"] = df_rm_limpo.get("mat", "---")
     df_rm_limpo["linha_id"] = df_rm_limpo.index.astype(str)
 
-    # 2. Higienização da Tabela Comercial (MANTIDO INTACTO E SEGURO)
+    # 2. Higienização da Tabela de Compras (PEDIDO DE COMPRA MEGA)
     df_pc_limpo = pd.DataFrame(index=df_pc_bruto.index)
     if not df_pc_bruto.empty:
         df_pc_bruto_copy = df_pc_bruto.copy()
         df_pc_bruto_copy["pedido_str"] = df_pc_bruto_copy.get("pedido", "---").astype(str).str.replace('.0', '', regex=False).str.strip()
-        df_pc_bruto_copy["mat_str"] = df_pc_bruto_copy.get("mat", "---").astype(str).str.replace('.0', '', regex=False).str.strip()
         df_pc_bruto_copy["rm_str"] = df_pc_bruto_copy.get("rm", "---").astype(str).str.replace('.0', '', regex=False).str.strip()
         df_pc_bruto_copy["comprador_limpo"] = df_pc_bruto_copy.get("comprador", "---")
         df_pc_bruto_copy["entrega_limpa"] = df_pc_bruto_copy.get("entrega", "---")
@@ -29,20 +28,22 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
         df_pc_bruto_copy["data_ocorrencia_pc"] = "---"
         df_pc_bruto_copy["nome_aprovador_pc"] = "---"
 
-        cols_finais_pc = ["pedido_str", "mat_str", "rm_str", "comprador_limpo", "entrega_limpa", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"]
+        cols_finais_pc = ["pedido_str", "rm_str", "comprador_limpo", "entrega_limpa", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"]
         for c in df_pc_bruto_copy.columns:
             if c in cols_finais_pc:
                 s = df_pc_bruto_copy[c].iloc[:, 0] if isinstance(df_pc_bruto_copy[c], pd.DataFrame) else df_pc_bruto_copy[c]
                 df_pc_limpo[c] = s.fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
 
     if "pedido_str" not in df_pc_limpo.columns: df_pc_limpo["pedido_str"] = "---"
-    if "mat_str" not in df_pc_limpo.columns: df_pc_limpo["mat_str"] = "---"
     if "rm_str" not in df_pc_limpo.columns: df_pc_limpo["rm_str"] = "---"
     df_pc_limpo.rename(columns={"comprador_limpo": "comprador", "entrega_limpa": "entrega"}, inplace=True, errors="ignore")
-    df_pc_limpo = df_pc_limpo.drop_duplicates(subset=["rm_str", "mat_str"]).copy()
+    
+    # Remove duplicados na tabela de compras baseado unicamente na RM para não triplicar linhas
+    df_pc_limpo = df_pc_limpo.drop_duplicates(subset=["rm_str"]).copy()
 
-    # O cruzamento exige obrigatoriamente a RM e o Material juntos (Trava de Segurança Antiduplicidade)
-    df_final = pd.merge(df_rm_limpo, df_pc_limpo, on=["rm_str", "mat_str"], how="left")
+    # 🌟 A REGRA DE OURO REESTABELECIDA: O relacionamento une os blocos olhando puramente o número da RM!
+    # Isso traz de volta os pedidos da Adrielle, Karolina e PCP instantaneamente!
+    df_final = pd.merge(df_rm_limpo, df_pc_limpo, on=["rm_str"], how="left")
 
     if "mat_str_x" in df_final.columns:
         df_final["mat_str"] = df_final["mat_str_x"]
@@ -85,9 +86,8 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
 
     df_final = df_final.drop_duplicates(subset=["linha_id"]).copy()
 
-    # 📐 EXTRAÇÃO TRATADA POR ÍNDICES DA TUPLA DO CALENDÁRIO
+    # Extração segura das posições do calendário
     possui_intervalo_valido = isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2
-    # 🌟 CORREÇÃO DO INDICE: Coleta as instâncias de datetime primitivas sem converter para strings cruas!
     data_inicio_filtro = filtro_periodo[0] if possui_intervalo_valido else None
     data_fim_filtro = filtro_periodo[1] if possui_intervalo_valido else None
     ignorar_calendario = (buscar_rm != "") or (buscar_pc != "")
