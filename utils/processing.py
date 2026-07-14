@@ -4,7 +4,7 @@ import datetime
 def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, buscar_pc, filtro_req, filtro_comp, filtro_status_pc, filtro_periodo):
     cols_exclusivas_rm = ["nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "rm_str", "mat_str", "seq_item"]
 
-    # 1. Limpeza e estruturação estrita da tabela de RMs
+    # 1. Higienização das RMs da esquerda
     df_rm_limpo = pd.DataFrame(index=df_rm_bruto.index)
     for c in df_rm_bruto.columns:
         if c in cols_exclusivas_rm:
@@ -12,35 +12,25 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
             df_rm_limpo[c] = s.fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
     df_rm_limpo["rm_str"] = df_rm_limpo.get("rm", "---")
     df_rm_limpo["mat_str"] = df_rm_limpo.get("mat", "---")
-    df_rm_limpo = df_rm_limpo.drop_duplicates().copy()
+    df_rm_limpo["linha_id"] = df_rm_limpo.index.astype(str)
 
-    # 2. Limpeza e estruturação estrita da tabela de Vínculos intermediários da ponte
-    if not df_vinculo.empty:
-        df_vinculo_limpo = pd.DataFrame(index=df_vinculo.index)
-        for c in ["rm", "pedido"]:
-            if c in df_vinculo.columns:
-                s = df_vinculo[c].iloc[:, 0] if isinstance(df_vinculo[c], pd.DataFrame) else df_vinculo[c]
-                df_vinculo_limpo[c] = s.fillna("").astype(str).str.replace('.0', '', regex=False).str.strip()
-        df_vinculo_limpo["rm_str"] = df_vinculo_limpo.get("rm", "---")
-        df_vinculo_limpo["pedido_str"] = df_vinculo_limpo.get("pedido", "---")
-        df_rm_consolidada = pd.merge(df_rm_limpo, df_vinculo_limpo[["rm_str", "pedido_str"]], on="rm_str", how="left")
-    else:
-        df_rm_consolidada = df_rm_limpo.copy()
-        df_rm_consolidada["pedido_str"] = "---"
-
-    # 3. Limpeza e estruturação da tabela de Pedidos de Compras (PC)
+    # 2. Higienização da Tabela de Compras (Pedido de Compra Mega Direto!)
     df_pc_limpo = pd.DataFrame(index=df_pc_bruto.index)
     if not df_pc_bruto.empty:
         df_pc_bruto_copy = df_pc_bruto.copy()
-        df_pc_bruto_copy["pedido_str"] = df_pc_bruto_copy.get("pedido", "---")
-        df_pc_bruto_copy["mat_str"] = df_pc_bruto_copy.get("mat", "---")
+        df_pc_bruto_copy["pedido_str"] = df_pc_bruto_copy.get("pedido", "---").astype(str).str.replace('.0', '', regex=False).str.strip()
+        df_pc_bruto_copy["mat_str"] = df_pc_bruto_copy.get("mat", "---").astype(str).str.replace('.0', '', regex=False).str.strip()
+        df_pc_bruto_copy["rm_str"] = df_pc_bruto_copy.get("rm", "---").astype(str).str.replace('.0', '', regex=False).str.strip()
         df_pc_bruto_copy["comprador_limpo"] = df_pc_bruto_copy.get("comprador", "---")
-        df_pc_bruto_copy["status_pc"] = df_pc_bruto_copy.get("status_documento", "---")
-        df_pc_bruto_copy["data_ocorrencia_pc"] = df_pc_bruto_copy.get("data_ocorrencia", "---")
-        df_pc_bruto_copy["nome_aprovador_pc"] = df_pc_bruto_copy.get("nome_aprovador", "---")
-        df_pc_bruto_copy["quantidade_comprada"] = df_pc_bruto_copy.get("quantidade", 0)
+        df_pc_bruto_copy["entrega_limpa"] = df_pc_bruto_copy.get("entrega", "---")
+        
+        # 🌟 PARÂMETRO INJETADO: Preenche a quantidade com a string literal 'None'
+        df_pc_bruto_copy["quantidade_comprada"] = "None"
+        df_pc_bruto_copy["status_pc"] = "---"
+        df_pc_bruto_copy["data_ocorrencia_pc"] = "---"
+        df_pc_bruto_copy["nome_aprovador_pc"] = "---"
 
-        cols_finais_pc = ["pedido_str", "mat_str", "comprador_limpo", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"]
+        cols_finais_pc = ["pedido_str", "mat_str", "rm_str", "comprador_limpo", "entrega_limpa", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"]
         for c in df_pc_bruto_copy.columns:
             if c in cols_finais_pc:
                 s = df_pc_bruto_copy[c].iloc[:, 0] if isinstance(df_pc_bruto_copy[c], pd.DataFrame) else df_pc_bruto_copy[c]
@@ -48,50 +38,38 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
 
     if "pedido_str" not in df_pc_limpo.columns: df_pc_limpo["pedido_str"] = "---"
     if "mat_str" not in df_pc_limpo.columns: df_pc_limpo["mat_str"] = "---"
-    if "comprador_limpo" not in df_pc_limpo.columns: df_pc_limpo["comprador_limpo"] = "---"
-    df_pc_limpo.rename(columns={"comprador_limpo": "comprador"}, inplace=True, errors="ignore")
-    df_pc_limpo = df_pc_limpo.drop_duplicates().copy()
+    if "rm_str" not in df_pc_limpo.columns: df_pc_limpo["rm_str"] = "---"
+    df_pc_limpo.rename(columns={"comprador_limpo": "comprador", "entrega_limpa": "entrega"}, inplace=True, errors="ignore")
+    df_pc_limpo = df_pc_limpo.drop_duplicates(subset=["rm_str", "mat_str"]).copy()
 
-    # Trava de segurança máxima: relacionamento obriga o match por pedido e material simultaneamente
-    df_final = pd.merge(df_rm_consolidada, df_pc_limpo, on=["pedido_str", "mat_str"], how="left")
+    # 🌟 O CRUZAMENTO PERFEITO: Amarra os dados unificando por RM e Material diretamente da tabela física!
+    df_final = pd.merge(df_rm_limpo, df_pc_limpo, on=["rm_str", "mat_str"], how="left")
 
-    todas_colunas_vitais = ["nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "rm_str", "mat_str", "pedido_str", "comprador", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc"]
+    todas_colunas_vitais = ["nome_solicitante", "rm", "mat", "desc_item", "sit_item", "qtd_solicitada", "data_emissao", "data_necessidade", "status_documento", "data_ocorrencia", "nome_aprovador", "rm_str", "mat_str", "pedido_str", "comprador", "entrega", "quantidade_comprada", "status_pc", "data_ocorrencia_pc", "nome_aprovador_pc", "linha_id"]
     for col in todas_colunas_vitais:
         if col not in df_final.columns: df_final[col] = "---"
 
-    s_final_rm = df_final["rm"].iloc[:, 0] if isinstance(df_final["rm"], pd.DataFrame) else df_final["rm"]
-    s_final_mat = df_final["mat"].iloc[:, 0] if isinstance(df_final["mat"], pd.DataFrame) else df_final["mat"]
-    df_final["rm"] = s_final_rm.fillna(df_final.get("rm_str", "---")).astype(str).str.strip()
-    df_final["mat"] = s_final_mat.fillna(df_final.get("mat_str", "---")).astype(str).str.strip()
-
     df_final["pedido_str"] = df_final["pedido_str"].fillna("---").astype(str).str.strip()
-    df_final["nome_solicitante"] = df_final["nome_solicitante"].fillna("---").astype(str).str.strip()
     df_final["comprador"] = df_final["comprador"].fillna("---").astype(str).str.strip()
+    df_final["quantidade_comprada"] = df_final["quantidade_comprada"].replace("---", "None")
 
-    # Filtros rápidos da interface contains
+    # Filtros contains rápidos da interface
     if buscar_rm:
         df_final = df_final[df_final["rm"].astype(str).str.contains(str(buscar_rm).strip(), na=False, regex=False)]
     if filtro_req != "Todos":
         df_final = df_final[df_final["nome_solicitante"].astype(str).str.contains(str(filtro_req).strip(), na=False, regex=False)]
     if filtro_comp != "Todos":
         df_final = df_final[df_final["comprador"].astype(str).str.contains(str(filtro_comp).strip(), na=False, regex=False)]
-    if buscar_pc and str(buscar_pc).strip() not in ["", "---", "nan", "None"]:
-        df_final = df_final[df_final["pedido_str"].astype(str).str.contains(str(buscar_pc).strip(), na=False, regex=False)]
-    if filtro_status_pc != "Todos":
-        df_final = df_final[df_final["status_pc"].astype(str).str.strip().str.upper() == {"Aprovado":"A","Em Aprovação":"E","Reprovado":"R"}[filtro_status_pc].upper()]
 
-    df_final["seq_item"] = df_final.get("seq_item", pd.Series(dtype=str, index=df_final.index)).fillna("---").astype(str)
-    df_final["rm_mat_seq_key"] = df_final["rm"].astype(str) + "_" + df_final["mat"].astype(str) + "_" + df_final["seq_item"]
-    df_final = df_final.drop_duplicates(subset=["rm_mat_seq_key"]).copy()
+    df_final = df_final.drop_duplicates(subset=["linha_id"]).copy()
 
-    # Cálculo de Datas Nativo com Retranca Contra Intervalos Incompletos
+    # Cálculo de Datas Cronológico Rígido
     lista_alertas_data, lista_entrega_dt_bruta, lista_necessidade_dt_bruta, indices_para_manter = [], [], [], []
     ignorar_calendario = (buscar_rm != "") or (buscar_pc != "")
     
-    # 🌟 TRAVA CONTRA LISTAS INCOMPLETAS: Só ativa as variáveis de datas se o usuário selecionou Início E Fim legítimos
     possui_intervalo_valido = isinstance(filtro_periodo, (list, tuple)) and len(filtro_periodo) == 2
-    data_inicio_filtro = filtro_periodo[0] if possui_intervalo_valido else None
-    data_fim_filtro = filtro_periodo[1] if possui_intervalo_valido else None
+    data_inicio_filtro = filtro_periodo if possui_intervalo_valido else None
+    data_fim_filtro = filtro_periodo if possui_intervalo_valido else None
 
     for idx in df_final.index:
         val_entrega = df_final.loc[idx, "entrega"]
@@ -99,7 +77,7 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
         val_emissao = df_final.loc[idx, "data_emissao"]
         
         def conv(valor):
-            if pd.isna(valor) or str(valor).strip() in ["", "---", "nan", "None", "NaT"]: return None
+            if pd.isna(valor) or str(valor).strip() in ["", "---", "nan", "None", "NaT", "Data não informada"]: return None
             try:
                 if hasattr(valor, "date"): return valor.date()
                 t_str = str(valor).strip()[:10]
@@ -110,15 +88,15 @@ def processar_e_unificar_dados(df_rm_bruto, df_pc_bruto, df_vinculo, buscar_rm, 
 
         dt_ent, dt_nec, dt_emi = conv(val_entrega), conv(val_necessidade), conv(val_emissao)
 
-        # Se o calendário estiver incompleto ou pendente de clique, o Python pula esta verificação de forma segura!
-        if not ignorar_calendario and data_inicio_filtro and data_fim_filtro:
+        if data_inicio_filtro and data_fim_filtro and not ignorar_calendario:
             if dt_emi is None or not (data_inicio_filtro <= dt_emi <= data_fim_filtro): continue
 
         indices_para_manter.append(idx)
         lista_entrega_dt_bruta.append(dt_ent)
         lista_necessidade_dt_bruta.append(dt_nec)
 
-        if dt_ent is None or dt_nec is None: lista_alertas_data.append("Data não informada")
+        if dt_ent is None or dt_nec is None: 
+            lista_alertas_data.append("Data não informada")
         else:
             diferenca = (dt_ent - dt_nec).days
             if diferenca > 0: lista_alertas_data.append(f"Atraso de {diferenca} dias")

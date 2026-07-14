@@ -13,59 +13,40 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
         res_rm = supabase.table("vw_approvo_rm").select("*").eq("rm", rm_parametro).limit(500).execute()
         df_rm_bruto = pd.DataFrame(res_rm.data)
         
-        res_vinculo = supabase.table("pedido_compra").select("rm", "pedido").eq("rm", int(rm_alvo) if rm_alvo.isdigit() else 0).execute()
-        df_vinculo = pd.DataFrame(res_vinculo.data)
-        
-        if not df_vinculo.empty and "pedido" in df_vinculo.columns:
-            lista_peds_pontes = [str(int(float(x))) for x in df_vinculo["pedido"].unique() if pd.notna(x)]
-            if lista_peds_pontes:
-                res_pc = supabase.table("vw_approvo_pc").select("*").in_("pedido", lista_peds_pontes).limit(500).execute()
-                df_pc_bruto = pd.DataFrame(res_pc.data)
+        # Busca direta na tabela física com os dados comerciais integrados
+        res_pc = supabase.table("pedido_compra").select("*").eq("rm", int(rm_alvo) if rm_alvo.isdigit() else 0).execute()
+        df_pc_bruto = pd.DataFrame(res_pc.data)
 
     # Rota B: Busca isolada por número do PC
     elif buscar_pc and str(buscar_pc).strip() != "":
         pc_alvo = str(buscar_pc).strip()
-        query_pc = supabase.table("vw_approvo_pc").select("*").eq("pedido", pc_alvo)
-        res_pc = query_pc.limit(500).execute()
+        
+        res_pc = supabase.table("pedido_compra").select("*").eq("pedido", int(pc_alvo) if pc_alvo.isdigit() else 0).execute()
         df_pc_bruto = pd.DataFrame(res_pc.data)
         
-        res_vinculo = supabase.table("pedido_compra").select("rm", "pedido").eq("pedido", int(pc_alvo) if pc_alvo.isdigit() else 0).execute()
-        df_vinculo = pd.DataFrame(res_vinculo.data)
-        
-        lista_rms_pontes = [int(float(x)) for x in df_vinculo["rm"].unique() if pd.notna(x)] if "rm" in df_vinculo.columns else []
+        lista_rms_pontes = [int(float(x)) for x in df_pc_bruto["rm"].unique() if pd.notna(x)] if "rm" in df_pc_bruto.columns else []
         if lista_rms_pontes:
             res_rm = supabase.table("vw_approvo_rm").select("*").in_("rm", lista_rms_pontes).execute()
             df_rm_bruto = pd.DataFrame(res_rm.data)
 
-    # Rota C: Rota de filtros combinados com dupla busca inteligente ilike
+    # Rota C: Fluxo de Filtros Combinados Globais
     else:
         query_rm = supabase.table("vw_approvo_rm").select("*")
-        
         if filtro_req != "Todos" and str(filtro_req).strip() != "":
             query_rm = query_rm.ilike("nome_solicitante", f"%{str(filtro_req).strip()}%")
-            
         if filtro_status_rm != "Todos":
             query_rm = query_rm.eq("status_documento", {"Aprovado":"A","Em Aprovação":"E","Reprovado":"R"}[filtro_status_rm])
-        res_rm = query_rm.limit(500).execute()
+        res_rm = query_rm.limit(1000).execute()
         df_rm_bruto = pd.DataFrame(res_rm.data)
 
-        query_vinculo = supabase.table("pedido_compra").select("rm", "pedido").limit(2000)
-        res_vinculo = query_vinculo.execute()
-        df_vinculo = pd.DataFrame(res_vinculo.data)
-
-        query_pc = supabase.table("vw_approvo_pc").select("*")
-        
-        # 🌟 O SEGUNDO SEGREDO DO ILIKE: Busca o Comprador por texto contido de forma idêntica!
+        # 🌟 BUSCA COMERCIAL DIRETA: Puxa o lote da tabela física pedido_compra aplicando o filtro de comprador
+        query_pc = supabase.table("pedido_compra").select("*")
         if filtro_comp != "Todos" and str(filtro_comp).strip() != "":
-            query_pc = query_pc.ilike("nome_aprovador", f"%{str(filtro_comp).strip()}%")
-            
-        if filtro_status_pc != "Todos": 
-            query_pc = query_pc.eq("status_documento", {"Aprovado":"A","Em Aprovação":"E","Reprovado":"R"}[filtro_status_pc])
-            
-        res_pc = query_pc.limit(1500).execute()
+            query_pc = query_pc.ilike("comprador", f"%{str(filtro_comp).strip()}%")
+        res_pc = query_pc.limit(2000).execute()
         df_pc_bruto = pd.DataFrame(res_pc.data)
 
-    # Injeção das chaves técnicas de strings pós-consulta
+    # Inicialização uniforme das strings técnicas para o Pandas
     if not df_rm_bruto.empty and "rm" in df_rm_bruto.columns:
         df_rm_bruto["rm_str"] = df_rm_bruto["rm"].astype(str).str.replace('.0', '', regex=False).str.strip()
         df_rm_bruto["mat_str"] = df_rm_bruto["mat"].astype(str).str.replace('.0', '', regex=False).str.strip()
@@ -73,9 +54,6 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
     if not df_pc_bruto.empty and "pedido" in df_pc_bruto.columns:
         df_pc_bruto["pedido_str"] = df_pc_bruto["pedido"].astype(str).str.replace('.0', '', regex=False).str.strip()
         df_pc_bruto["mat_str"] = df_pc_bruto["mat"].astype(str).str.replace('.0', '', regex=False).str.strip()
-
-    if not df_vinculo.empty and "pedido" in df_vinculo.columns:
-        df_vinculo["pedido_str"] = df_vinculo["pedido"].astype(str).str.replace('.0', '', regex=False).str.strip()
-        df_vinculo["rm_str"] = df_vinculo["rm"].astype(str).str.replace('.0', '', regex=False).str.strip()
+        df_pc_bruto["rm_str"] = df_pc_bruto["rm"].astype(str).str.replace('.0', '', regex=False).str.strip()
 
     return df_rm_bruto, df_pc_bruto, df_vinculo
