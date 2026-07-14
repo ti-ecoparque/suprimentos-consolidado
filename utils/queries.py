@@ -30,6 +30,7 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
 
     # Rota C: Fluxo de Filtros Combinados Globais
     else:
+        # 1. Puxa as RMs filtradas (Blocos REQUISICAO e APPROVAL RM totalmente preservados!)
         query_rm = supabase.table("vw_approvo_rm").select("*")
         if filtro_req != "Todos" and str(filtro_req).strip() != "":
             query_rm = query_rm.ilike("nome_solicitante", f"%{str(filtro_req).strip()}%")
@@ -38,7 +39,7 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
         res_rm = query_rm.limit(1000).execute()
         df_rm_bruto = pd.DataFrame(res_rm.data)
 
-        # Coleta os dados comerciais diretamente da tabela física pedido_compra
+        # 2. Puxa a tabela física pedido_compra (Bloco PEDIDO DE COMPRA MEGA totalmente preservado!)
         query_pc = supabase.table("pedido_compra").select("*")
         if filtro_comp != "Todos" and str(filtro_comp).strip() != "":
             query_pc = query_pc.ilike("comprador", f"%{str(filtro_comp).strip()}%")
@@ -51,17 +52,18 @@ def executar_consultas_supabase(supabase, buscar_rm, buscar_pc, filtro_req, filt
         res_pc = query_pc.limit(1000).execute()
         df_pc_bruto = pd.DataFrame(res_pc.data)
 
-    # 🌟 A CAMADA ISOLADA DE CACHE: Busca os dados de aprovação da vw_approvo_pc para a memória RAM
-    # Se encontramos pedidos válidos na tabela física, trazemos as aprovações deles por Left Join indireto
+    # 🌟 CAMADA ISOLADA DE REPARO: Extração tratada como string para não quebrar o cache do Approval PC
     lista_peds_cache = []
     if not df_pc_bruto.empty and "pedido" in df_pc_bruto.columns:
-        lista_peds_cache = [str(int(float(x))) for x in df_pc_bruto["pedido"].unique() if pd.notna(x) and str(x).strip().replace('.0', '').isdigit()]
+        # Arranca o '.0' de flutuantes e remove espaços das pontas com segurança textual total
+        lista_peds_cache = [str(x).replace('.0', '').strip() for x in df_pc_bruto["pedido"].unique() if pd.notna(x) and str(x).strip() != ""]
         
     if lista_peds_cache:
+        # Busca direta e isolada na visão de aprovações do PC do Supabase
         res_vinculo = supabase.table("vw_approvo_pc").select("*").in_("pedido", lista_peds_cache).execute()
         df_vinculo = pd.DataFrame(res_vinculo.data)
 
-    # Inicialização uniforme das strings de acoplamento do Pandas
+    # Inicialização uniforme das colunas técnicas do Pandas
     if not df_rm_bruto.empty and "rm" in df_rm_bruto.columns:
         df_rm_bruto["rm_str"] = df_rm_bruto["rm"].astype(str).str.replace('.0', '', regex=False).str.strip()
         df_rm_bruto["mat_str"] = df_rm_bruto["mat"].astype(str).str.replace('.0', '', regex=False).str.strip()
